@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="GAINS">
 <title>GAINS</title>
-<!-- v3.1 - connected to Claude -->
+<!-- v3.2 -->
 <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%232743F0'/%3E%3Ctext x='50' y='68' font-size='50' font-weight='900' text-anchor='middle' fill='white' font-family='Helvetica'%3EG%3C/text%3E%3C/svg%3E">
 <style>
   html, body { margin: 0; padding: 0; background: #F5F4EF; overscroll-behavior: none; }
@@ -243,12 +243,17 @@ function GainCoach() {
       next.nextWorkout = state.nextWorkout === "A" ? "B" : "A";
     }
     // streak: all events done today
-    const allDone = events.every((e) => checks[e.id]);
+    const allDone = events.every((e) => checks[e.id] === true);
     if (allDone && state.lastFullDay !== todayKey()) {
       next.streak = (state.streak || 0) + 1;
       next.lastFullDay = todayKey();
     }
     save(next);
+  };
+
+  const skipEvent = (id) => {
+    const checks = { ...state.checks, [id]: "skip" };
+    save({ ...state, checks, checksDate: todayKey() });
   };
 
   const logWeight = () => {
@@ -335,10 +340,10 @@ function GainCoach() {
 
   const C = { ink: "#0E0E10", paper: "#F5F4EF", blue: "#2743F0", gray: "#6E6E72", line: "#E4E2DA", warn: "#C6470E" };
   const S = {
-    app: { fontFamily: "'Helvetica Neue', Helvetica, Arial, sans-serif", background: C.paper, color: C.ink, height: "100vh", overflowY: "auto", WebkitOverflowScrolling: "touch", maxWidth: 480, margin: "0 auto", paddingBottom: 110, boxSizing: "border-box" },
+    app: { fontFamily: "'Helvetica Neue', Helvetica, Arial, sans-serif", background: C.paper, color: C.ink, height: "100vh", overflowY: "auto", WebkitOverflowScrolling: "touch", maxWidth: 480, margin: "0 auto", paddingTop: "env(safe-area-inset-top)", paddingBottom: "calc(110px + env(safe-area-inset-bottom))", boxSizing: "border-box" },
     h1: { fontSize: 34, fontWeight: 900, letterSpacing: "-0.03em", textTransform: "uppercase", margin: "0 0 2px" },
     header: { padding: "22px 18px 6px" },
-    tabbar: { position: "fixed", bottom: 0, left: 0, right: 0, maxWidth: 480, margin: "0 auto", display: "flex", background: C.ink, borderRadius: "16px 16px 0 0", zIndex: 10 },
+    tabbar: { position: "fixed", bottom: 0, left: 0, right: 0, maxWidth: 480, margin: "0 auto", display: "flex", background: C.ink, borderRadius: "16px 16px 0 0", zIndex: 10, paddingBottom: "env(safe-area-inset-bottom)" },
     tabBtn: (a) => ({ flex: 1, padding: "15px 0", background: "none", border: "none", color: a ? C.paper : "#6E6E72", fontWeight: 800, fontSize: 12, letterSpacing: "0.08em", textTransform: "uppercase", cursor: "pointer", borderTop: a ? `3px solid ${C.blue}` : "3px solid transparent" }),
     btn: { padding: "12px 18px", background: C.blue, color: "#fff", border: `2px solid ${C.ink}`, borderRadius: 10, fontWeight: 800, fontSize: 15, cursor: "pointer" },
     input: { flex: 1, padding: "12px 14px", fontSize: 16, border: `2px solid ${C.ink}`, borderRadius: 10, background: "#fff", minWidth: 0 },
@@ -352,13 +357,15 @@ function GainCoach() {
     const done = st === "done";
     const active = st === "active";
     const base = { margin: "10px 14px", borderRadius: 14, border: `2px solid ${C.ink}`, background: "#fff", transition: "all 0.4s ease", overflow: "hidden" };
-    if (done)
+    if (done) {
+      const skipped = state.checks[e.id] === "skip";
       return (
         <div style={{ ...base, opacity: 0.35, transform: "scale(0.94)", padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 }}>
-          <span style={{ fontWeight: 900, color: C.blue }}>✓</span>
-          <span style={{ fontSize: 14, fontWeight: 700, textDecoration: "line-through" }}>{fmt(e.time)} — {e.title}</span>
+          <span style={{ fontWeight: 900, color: skipped ? C.gray : C.blue }}>{skipped ? "✕" : "✓"}</span>
+          <span style={{ fontSize: 14, fontWeight: 700, textDecoration: "line-through" }}>{fmt(e.time)} — {e.title}{skipped ? " (skipped)" : ""}</span>
         </div>
       );
+    }
     return (
       <div style={{ ...base, padding: 16, boxShadow: active ? `5px 5px 0 ${C.blue}` : `4px 4px 0 ${C.ink}`, opacity: active ? 1 : 0.75 }}>
         <span style={{ fontFamily: "'Courier New', monospace", fontWeight: 700, fontSize: 13, color: active ? C.blue : C.gray }}>
@@ -372,6 +379,7 @@ function GainCoach() {
           ))}
         </ol>
         <button style={{ ...S.btn, width: "100%", marginTop: 14 }} onClick={() => toggleCheck(e.id)}>Done ✓</button>
+        <button style={{ width: "100%", marginTop: 6, padding: "10px", background: "none", border: "none", color: C.gray, fontWeight: 700, fontSize: 13, cursor: "pointer" }} onClick={() => skipEvent(e.id)}>Skip today</button>
       </div>
     );
   };
@@ -463,8 +471,10 @@ function GainCoach() {
                   <span style={{ fontWeight: 600, fontSize: 15 }}>{l.name}</span>
                   <input
                     type="number"
-                    value={state.liftWeights[id]}
-                    onChange={(ev) => setLift(id, ev.target.value)}
+                    inputMode="decimal"
+                    key={id}
+                    defaultValue={state.liftWeights[id]}
+                    onBlur={(ev) => setLift(id, ev.target.value)}
                     style={{ width: 70, padding: "6px 8px", fontSize: 15, fontWeight: 700, border: `2px solid ${C.ink}`, borderRadius: 8, textAlign: "right" }}
                   />
                 </div>
