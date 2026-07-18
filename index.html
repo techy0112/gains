@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="GAINS">
 <title>GAINS</title>
-<!-- v3.2 -->
+<!-- v3.3 -->
 <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%232743F0'/%3E%3Ctext x='50' y='68' font-size='50' font-weight='900' text-anchor='middle' fill='white' font-family='Helvetica'%3EG%3C/text%3E%3C/svg%3E">
 <style>
   html, body { margin: 0; padding: 0; background: #F5F4EF; overscroll-behavior: none; }
@@ -57,6 +57,16 @@ const todayKey = () => {
   return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
 };
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const CALS = { shake1: 1100, snack1: 400, prelift: 100, lift: 0, shake2: 1600, snack2: 450, weighin: 0 };
+const TOASTS = {
+  shake1: "+1,100 cal banked 🥤",
+  snack1: "+400 cal banked 🥜",
+  prelift: "Fueled up ⛽",
+  lift: "Workout done — bar goes up 5 lbs next time 🏋️",
+  shake2: "+1,600 cal banked 🍽️",
+  snack2: "+450 cal banked 🌙",
+  weighin: "Logged. Data = gains 📈",
+};
 const fmt = (mins) => {
   let h = Math.floor(mins / 60);
   const m = mins % 60;
@@ -169,7 +179,10 @@ function GainCoach() {
     liftWeights: { ...DEFAULT_WEIGHTS },
     streak: 0,
     lastFullDay: null,
+    startDate: null,
+    totals: { cal: 0, shakes: 0, workouts: 0 },
   });
+  const [toast, setToast] = useState(null);
   const [loaded, setLoaded] = useState(false);
   const [weightInput, setWeightInput] = useState("");
   const [startInput, setStartInput] = useState("");
@@ -231,8 +244,22 @@ function GainCoach() {
   }, [nowMin, state.notifOn, state.checks]);
 
   const toggleCheck = (id) => {
+    const was = state.checks[id] === true;
     const checks = { ...state.checks, [id]: !state.checks[id] };
     const next = { ...state, checks, checksDate: todayKey() };
+    const t = { ...(state.totals || { cal: 0, shakes: 0, workouts: 0 }) };
+    if (!was) {
+      t.cal += CALS[id] || 0;
+      if (id === "shake1" || id === "shake2") t.shakes += 1;
+      if (id === "lift") t.workouts += 1;
+      setToast(TOASTS[id] || "Done ✓");
+      setTimeout(() => setToast(null), 2500);
+    } else {
+      t.cal -= CALS[id] || 0;
+      if (id === "shake1" || id === "shake2") t.shakes = Math.max(0, t.shakes - 1);
+      if (id === "lift") t.workouts = Math.max(0, t.workouts - 1);
+    }
+    next.totals = t;
     // workout done: flip A/B and auto-progress weights
     if (id === "lift" && !state.checks[id]) {
       const lw = { ...state.liftWeights };
@@ -296,6 +323,10 @@ function GainCoach() {
     return "future";
   };
   const nextUp = events.find((e) => nowMin < e.time);
+  const dayN = state.startDate ? Math.floor((Date.now() - new Date(state.startDate).getTime()) / 864e5) + 1 : null;
+  const weekN = dayN ? Math.floor((dayN - 1) / 7) + 1 : null;
+  const calsToday = events.reduce((a, e) => a + (state.checks[e.id] === true ? (CALS[e.id] || 0) : 0), 0);
+  const startPlan = () => save({ ...state, startDate: new Date().toISOString().slice(0, 10) });
   const liveCount = events.filter((e) => state.checks[e.id]).length;
 
   // ---- auto-coach: flat over last 14 days? ----
@@ -391,11 +422,35 @@ function GainCoach() {
       {tab === "home" && (
         <>
           <div style={S.header}>
+            {dayN && (
+              <div style={{ fontSize: 15, fontWeight: 900, letterSpacing: "0.1em", color: C.blue, textTransform: "uppercase", marginBottom: 2 }}>
+                Day {dayN} · Week {weekN}
+              </div>
+            )}
             <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.14em", color: C.gray, textTransform: "uppercase" }}>
               {DAYS[day]} · {fmt(nowMin)} · {liveCount}/{events.length} done{state.streak > 0 ? ` · 🔥 ${state.streak} day streak` : ""}
             </div>
             <h1 style={S.h1}>{isLiftDay ? `Lift Day ${state.nextWorkout}` : "Rest & Eat"}</h1>
+            <div style={{ height: 8, borderRadius: 4, background: "#E4E2DA", marginTop: 10, overflow: "hidden" }}>
+              <div style={{ height: "100%", width: `${(liveCount / events.length) * 100}%`, background: C.blue, transition: "width 0.5s ease" }} />
+            </div>
+            {calsToday > 0 && (
+              <div style={{ fontSize: 13, fontWeight: 800, color: C.ink, marginTop: 6 }}>⚡ {calsToday.toLocaleString()} cal banked today</div>
+            )}
           </div>
+
+          {toast && (
+            <div style={{ position: "fixed", top: "calc(env(safe-area-inset-top) + 12px)", left: "50%", transform: "translateX(-50%)", background: C.ink, color: "#fff", padding: "12px 20px", borderRadius: 12, fontWeight: 800, fontSize: 15, zIndex: 99, boxShadow: "0 4px 14px rgba(0,0,0,0.3)", whiteSpace: "nowrap" }}>
+              {toast}
+            </div>
+          )}
+
+          {!state.startDate && (
+            <div style={{ ...S.card, textAlign: "center" }}>
+              <p style={{ fontSize: 15, fontWeight: 700, margin: "0 0 12px" }}>Building your setup? Cool. When you're ready to officially begin, hit this and today becomes Day 1.</p>
+              <button style={{ ...S.btn, width: "100%", fontSize: 17 }} onClick={startPlan}>🚀 Start Day 1</button>
+            </div>
+          )}
 
           {coachFlat && (
             <div style={{ margin: "10px 14px", padding: "12px 16px", borderRadius: 12, border: `2px solid ${C.warn}`, background: "#FDF1EA", fontSize: 14, fontWeight: 700, color: C.warn }}>
@@ -446,6 +501,16 @@ function GainCoach() {
             <div style={{ display: "flex", gap: 10 }}>
               <input style={S.input} type="number" inputMode="decimal" placeholder="lbs" value={weightInput} onChange={(ev) => setWeightInput(ev.target.value)} />
               <button style={S.btn} onClick={logWeight}>Log</button>
+            </div>
+          </div>
+
+          <div style={S.card}>
+            <p style={S.label}>All-time (only goes up)</p>
+            <div style={{ display: "flex", justifyContent: "space-between", textAlign: "center" }}>
+              <div><div style={{ fontSize: 11, fontWeight: 800, color: C.gray, textTransform: "uppercase" }}>Cal banked</div><div style={{ fontSize: 22, fontWeight: 900, color: C.blue }}>{(state.totals?.cal || 0).toLocaleString()}</div></div>
+              <div><div style={{ fontSize: 11, fontWeight: 800, color: C.gray, textTransform: "uppercase" }}>Shakes</div><div style={{ fontSize: 22, fontWeight: 900 }}>{state.totals?.shakes || 0}</div></div>
+              <div><div style={{ fontSize: 11, fontWeight: 800, color: C.gray, textTransform: "uppercase" }}>Workouts</div><div style={{ fontSize: 22, fontWeight: 900 }}>{state.totals?.workouts || 0}</div></div>
+              <div><div style={{ fontSize: 11, fontWeight: 800, color: C.gray, textTransform: "uppercase" }}>Streak</div><div style={{ fontSize: 22, fontWeight: 900 }}>🔥{state.streak || 0}</div></div>
             </div>
           </div>
 
