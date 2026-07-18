@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="GAINS">
 <title>GAINS</title>
-<!-- v3.7 -->
+<!-- v3.8 -->
 <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%232743F0'/%3E%3Ctext x='50' y='68' font-size='50' font-weight='900' text-anchor='middle' fill='white' font-family='Helvetica'%3EG%3C/text%3E%3C/svg%3E">
 <style>
   html, body { margin: 0; padding: 0; background: #F5F4EF; overscroll-behavior: none; }
@@ -266,17 +266,37 @@ function GainCoach() {
       if (id === "lift") t.workouts = Math.max(0, t.workouts - 1);
     }
     next.totals = t;
-    // workout done: flip A/B and auto-progress weights
     if (id === "lift" && !state.checks[id]) {
+      next.nextWorkout = state.nextWorkout === "A" ? "B" : "A";
+    }
+    // streak: all events done today
+    const allDone = events.every((e) => checks[e.id] === true);
+    if (allDone && state.lastFullDay !== todayKey()) {
+      next.streak = (state.streak || 0) + 1;
+      next.lastFullDay = todayKey();
+    }
+    save(next);
+  };
+
+  const completeLift = (success) => {
+    const checks = { ...state.checks, lift: true };
+    const next = { ...state, checks, checksDate: todayKey() };
+    const t = { ...(state.totals || { cal: 0, shakes: 0, workouts: 0 }) };
+    t.workouts += 1;
+    next.totals = t;
+    next.nextWorkout = state.nextWorkout === "A" ? "B" : "A";
+    if (success) {
       const lw = { ...state.liftWeights };
       LIFTS[state.nextWorkout].forEach((l) => {
         if (l.inc > 0) lw[l.id] = (lw[l.id] || 0) + l.inc;
       });
       next.liftWeights = lw;
-      next.nextWorkout = state.nextWorkout === "A" ? "B" : "A";
+      setToast("All reps hit — bar goes up next time 🏋️");
+    } else {
+      setToast("Logged. Same weight next time — you'll get it 💪");
     }
-    // streak: all events done today
-    const allDone = events.every((e) => checks[e.id] === true);
+    setTimeout(() => setToast(null), 2500);
+    const allDone = events.every((e) => (e.id === "lift" ? true : checks[e.id] === true));
     if (allDone && state.lastFullDay !== todayKey()) {
       next.streak = (state.streak || 0) + 1;
       next.lastFullDay = todayKey();
@@ -425,7 +445,13 @@ function GainCoach() {
             <button style={S.btn} onClick={() => { logWeight(); toggleCheck(e.id); }}>Log ✓</button>
           </div>
         )}
-        {e.id !== "weighin" && <button style={{ ...S.btn, width: "100%", marginTop: 14 }} onClick={() => toggleCheck(e.id)}>Done ✓</button>}
+        {e.id === "lift" && (
+          <div style={{ marginTop: 14 }}>
+            <button style={{ ...S.btn, width: "100%" }} onClick={() => completeLift(true)}>Hit all reps ✓</button>
+            <button style={{ ...S.btn, width: "100%", marginTop: 8, background: "#fff", color: C.ink }} onClick={() => completeLift(false)}>Missed some reps</button>
+          </div>
+        )}
+        {e.id !== "weighin" && e.id !== "lift" && <button style={{ ...S.btn, width: "100%", marginTop: 14 }} onClick={() => toggleCheck(e.id)}>Done ✓</button>}
         <button style={{ width: "100%", marginTop: 6, padding: "10px", background: "none", border: "none", color: C.gray, fontWeight: 700, fontSize: 13, cursor: "pointer" }} onClick={() => skipEvent(e.id)}>Skip today</button>
       </div>
     );
