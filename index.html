@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="GAINS">
 <title>GAINS</title>
-<!-- v4.0 -->
+<!-- v4.1 -->
 <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%232743F0'/%3E%3Ctext x='50' y='68' font-size='50' font-weight='900' text-anchor='middle' fill='white' font-family='Helvetica'%3EG%3C/text%3E%3C/svg%3E">
 <style>
   html, body { margin: 0; padding: 0; background: #F5F4EF; overscroll-behavior: none; }
@@ -72,14 +72,14 @@ const TOASTS = {
 };
 
 const PANTRY = [
-  { id: "milk", name: "Whole milk", unit: "cups", pkg: 16, pkgLabel: "1 gallon", perDay: 5, buy: "maps" },
-  { id: "oats", name: "Rolled oats", unit: "cups", pkg: 15, pkgLabel: "42oz canister", perDay: 1.5, buy: "maps" },
-  { id: "pb", name: "Peanut butter", unit: "tbsp", pkg: 72, pkgLabel: "40oz jar", perDay: 4, buy: "maps" },
-  { id: "bananas", name: "Bananas", unit: "", pkg: 7, pkgLabel: "1 bunch", perDay: 2, buy: "maps" },
-  { id: "whey", name: "Whey protein", unit: "scoops", pkg: 29, pkgLabel: "2lb tub", perDay: 2, buy: "https://www.amazon.com/s?k=optimum+nutrition+gold+standard+whey" },
-  { id: "honey", name: "Honey", unit: "tbsp", pkg: 24, pkgLabel: "12oz bottle", perDay: 2, buy: "maps" },
-  { id: "creatine", name: "Creatine", unit: "tsp", pkg: 200, pkgLabel: "1kg bag", perDay: 1, buy: "https://www.amazon.com/s?k=bulksupplements+creatine+monohydrate+1kg" },
-  { id: "snacks", name: "Trail mix / bars", unit: "servings", pkg: 14, pkgLabel: "big bag + box", perDay: 2, buy: "maps" },
+  { id: "milk", name: "Whole milk", unit: "cups", pkg: 16, pkgLabel: "1 gallon", brand: "Any brand · 1 gallon jug", perDay: 5, buy: "https://www.amazon.com/s?k=whole+milk+gallon" },
+  { id: "oats", name: "Rolled oats", unit: "cups", pkg: 15, pkgLabel: "42oz canister", brand: "Quaker Old Fashioned · 42oz", perDay: 1.5, buy: "https://www.amazon.com/s?k=quaker+old+fashioned+oats+42oz" },
+  { id: "pb", name: "Peanut butter", unit: "tbsp", pkg: 72, pkgLabel: "40oz jar", brand: "Jif or Skippy · 40oz jar", perDay: 4, buy: "https://www.amazon.com/s?k=jif+creamy+peanut+butter+40oz" },
+  { id: "bananas", name: "Bananas", unit: "", pkg: 7, pkgLabel: "1 bunch", brand: "1–2 bunches, slightly green", perDay: 2, buy: "https://www.amazon.com/s?k=fresh+bananas" },
+  { id: "whey", name: "Whey protein", unit: "scoops", pkg: 29, pkgLabel: "2lb tub", brand: "ON Gold Standard · 2lb (or Nutricost)", perDay: 2, buy: "https://www.amazon.com/s?k=optimum+nutrition+gold+standard+whey+2lb" },
+  { id: "honey", name: "Honey", unit: "tbsp", pkg: 24, pkgLabel: "12oz bottle", brand: "Any brand · 12oz squeeze bottle", perDay: 2, buy: "https://www.amazon.com/s?k=honey+12oz+bottle" },
+  { id: "creatine", name: "Creatine", unit: "tsp", pkg: 200, pkgLabel: "1kg bag", brand: "BulkSupplements monohydrate · 1kg", perDay: 1, buy: "https://www.amazon.com/dp/B00E9M4XEE" },
+  { id: "snacks", name: "Trail mix / bars", unit: "servings", pkg: 14, pkgLabel: "big bag + box", brand: "Planters/Kirkland mix 2lb + Clif box", perDay: 2, buy: "https://www.amazon.com/s?k=planters+trail+mix+2lb" },
 ];
 const FULL_PANTRY = Object.fromEntries(PANTRY.map((i) => [i.id, i.pkg]));
 const CONSUME = {
@@ -445,7 +445,7 @@ function GainCoach() {
 
   const C = { ink: "#0E0E10", paper: "#F5F4EF", blue: "#2743F0", gray: "#6E6E72", line: "#E4E2DA", warn: "#C6470E" };
   const S = {
-    app: { fontFamily: "'Helvetica Neue', Helvetica, Arial, sans-serif", background: C.paper, color: C.ink, height: "100vh", overflowY: "auto", WebkitOverflowScrolling: "touch", maxWidth: 480, margin: "0 auto", paddingTop: TOP_PAD, paddingBottom: "calc(110px + env(safe-area-inset-bottom))", boxSizing: "border-box" },
+    app: { fontFamily: "'Helvetica Neue', Helvetica, Arial, sans-serif", background: C.paper, color: C.ink, height: "100vh", overflowY: "auto", WebkitOverflowScrolling: "touch", maxWidth: 480, margin: "0 auto", paddingTop: TOP_PAD, paddingBottom: "calc(150px + env(safe-area-inset-bottom))", boxSizing: "border-box" },
     h1: { fontSize: 34, fontWeight: 900, letterSpacing: "-0.03em", textTransform: "uppercase", margin: "0 0 2px" },
     header: { padding: "22px 18px 6px" },
     tabbar: { position: "fixed", bottom: 0, left: 0, right: 0, maxWidth: 480, margin: "0 auto", display: "flex", background: C.ink, borderRadius: "16px 16px 0 0", zIndex: 10, paddingBottom: "env(safe-area-inset-bottom)" },
@@ -666,14 +666,15 @@ function GainCoach() {
                 <div style={{ height: 8, borderRadius: 4, background: "#E4E2DA", margin: "10px 0", overflow: "hidden" }}>
                   <div style={{ height: "100%", width: `${frac * 100}%`, background: low ? C.warn : C.blue, transition: "width 0.4s" }} />
                 </div>
-                <div style={{ fontSize: 13, color: C.gray, marginBottom: 10 }}>
-                  ~{Math.round(left * 10) / 10} {item.unit} left · pack = {item.pkgLabel}
+                <div style={{ fontSize: 13, color: C.gray, marginBottom: 4 }}>
+                  ~{Math.round(left * 10) / 10} {item.unit} left
+                </div>
+                <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>
+                  Buy: {item.brand}
                 </div>
                 <div style={{ display: "flex", gap: 8 }}>
                   <button style={{ ...S.btn, flex: 1, padding: "10px" }} onClick={() => restock(item.id)}>Bought one ✓</button>
-                  <a href={buyUrl} target="_blank" rel="noopener" style={{ ...S.btn, flex: 1, padding: "10px", background: "#fff", color: C.ink, textAlign: "center", textDecoration: "none" }}>
-                    {item.buy === "maps" ? "📍 Find store" : "🛒 Buy online"}
-                  </a>
+                  <a href={buyUrl} target="_blank" rel="noopener" style={{ ...S.btn, flex: 1, padding: "10px", background: "#fff", color: C.ink, textAlign: "center", textDecoration: "none" }}>🛒 Amazon</a>
                 </div>
               </div>
             );
