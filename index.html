@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="GAINS">
 <title>GAINS</title>
-<!-- v4.2 -->
+<!-- v4.3 -->
 <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%232743F0'/%3E%3Ctext x='50' y='68' font-size='50' font-weight='900' text-anchor='middle' fill='white' font-family='Helvetica'%3EG%3C/text%3E%3C/svg%3E">
 <style>
   html, body { margin: 0; padding: 0; background: #F5F4EF; overscroll-behavior: none; }
@@ -90,6 +90,21 @@ const CONSUME = {
   prelift: { bananas: 1 },
 };
 const MAPS_URL = "https://maps.apple.com/?q=grocery+store";
+const VIDEOS = {
+  squat: { id: "f-KL4VNN96E" },
+  bench: { id: "gBZkSn-zsD0" },
+  deadlift: { q: "how to deadlift proper form beginner" },
+  ohp: { q: "overhead press form tutorial beginner" },
+  row: { q: "barbell row form tutorial" },
+  pullup: { q: "pull up form tutorial beginner" },
+  curl: { q: "dumbbell curl form tutorial" },
+  plank: { q: "plank form tutorial" },
+};
+const videoSrc = (id) => {
+  const v = VIDEOS[id];
+  if (!v) return null;
+  return v.id ? `https://www.youtube.com/embed/${v.id}` : `https://www.youtube.com/embed?listType=search&list=${encodeURIComponent(v.q)}`;
+};
 const fmt = (mins) => {
   let h = Math.floor(mins / 60);
   const m = mins % 60;
@@ -214,6 +229,8 @@ function GainCoach() {
   const [weightInput, setWeightInput] = useState("");
   const [startInput, setStartInput] = useState("");
   const [range, setRange] = useState("ALL");
+  const [liftTab, setLiftTab] = useState("A");
+  const [openLift, setOpenLift] = useState(null);
   const notified = useRef({});
 
   const day = new Date().getDay();
@@ -646,6 +663,46 @@ function GainCoach() {
         </>
       )}
 
+      {tab === "lifts" && (
+        <>
+          <div style={S.header}><h1 style={S.h1}>Lifts</h1></div>
+          <div style={{ display: "flex", gap: 8, margin: "0 14px 4px" }}>
+            {["A", "B"].map((w) => (
+              <button key={w} onClick={() => { setLiftTab(w); setOpenLift(null); }} style={{ flex: 1, padding: "12px", fontWeight: 900, fontSize: 15, borderRadius: 10, border: `2px solid ${C.ink}`, background: liftTab === w ? C.blue : "#fff", color: liftTab === w ? "#fff" : C.ink, cursor: "pointer" }}>
+                Workout {w}
+              </button>
+            ))}
+          </div>
+          {LIFTS[liftTab].map((l) => {
+            const open = openLift === l.id;
+            const w = state.liftWeights[l.id];
+            const showW = !["plank", "pullup"].includes(l.id);
+            return (
+              <div key={l.id} style={{ ...S.card, padding: 0, overflow: "hidden" }}>
+                <div onClick={() => setOpenLift(open ? null : l.id)} style={{ padding: 16, display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}>
+                  <div>
+                    <div style={{ fontWeight: 800, fontSize: 16 }}>{l.name}</div>
+                    <div style={{ fontSize: 13, color: C.gray, fontWeight: 600 }}>{l.scheme}{showW ? ` @ ${w} lbs` : ""}</div>
+                  </div>
+                  <span style={{ fontWeight: 900, fontSize: 18, color: C.blue }}>{open ? "▲" : "▶"}</span>
+                </div>
+                {open && (
+                  <div style={{ borderTop: `2px solid ${C.ink}` }}>
+                    <iframe
+                      src={videoSrc(l.id)}
+                      style={{ width: "100%", aspectRatio: "16/9", border: "none", display: "block" }}
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                      title={l.name}
+                    />
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </>
+      )}
+
       {tab === "fridge" && (
         <>
           <div style={S.header}><h1 style={S.h1}>Fridge</h1></div>
@@ -736,9 +793,10 @@ function GainCoach() {
 
       <nav style={S.tabbar}>
         <button style={S.tabBtn(tab === "home")} onClick={() => setTab("home")}>Today</button>
-        <button style={S.tabBtn(tab === "progress")} onClick={() => setTab("progress")}>Progress</button>
+        <button style={S.tabBtn(tab === "lifts")} onClick={() => setTab("lifts")}>Lifts</button>
         <button style={S.tabBtn(tab === "fridge")} onClick={() => setTab("fridge")}>Fridge</button>
-        <button style={S.tabBtn(tab === "settings")} onClick={() => setTab("settings")}>Settings</button>
+        <button style={S.tabBtn(tab === "progress")} onClick={() => setTab("progress")}>Stats</button>
+        <button style={S.tabBtn(tab === "settings")} onClick={() => setTab("settings")}>More</button>
       </nav>
     </div>
   );
