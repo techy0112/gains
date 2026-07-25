@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="GAINS">
 <title>GAINS</title>
-<!-- v5.6 -->
+<!-- v5.7 -->
 <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%232743F0'/%3E%3Ctext x='50' y='68' font-size='50' font-weight='900' text-anchor='middle' fill='white' font-family='Helvetica'%3EG%3C/text%3E%3C/svg%3E">
 <style>
   html, body { margin: 0; padding: 0; background: #F5F4EF; -webkit-overflow-scrolling: touch; }
@@ -58,7 +58,7 @@ const todayKey = () => {
   return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
 };
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const CALS = { shake1: 1100, snack1: 400, prelift: 100, lift: 0, shake2: 1600, snack2: 450, weighin: 0 };
+const CALS = { shake1: 1100, snack1: 400, prelift: 100, lift: 0, shake2: 1600, snack2: 450, weighin: 0, water1: 0, water2: 0, water3: 0, water4: 0 };
 const TOASTS = {
   shake1: "+1,100 cal banked 🥤",
   snack1: "+400 cal banked 🥜",
@@ -67,6 +67,10 @@ const TOASTS = {
   shake2: "+1,600 cal banked 🍽️",
   snack2: "+450 cal banked 🌙",
   weighin: "Logged. Data = gains 📈",
+  water1: "Hydrated 💧",
+  water2: "Hydrated 💧",
+  water3: "Hydrated 💧",
+  water4: "Hydrated 💧",
 };
 
 const PANTRY = [
@@ -142,6 +146,13 @@ const buildEvents = (isLiftDay, isSunday, letter, offsetMin, liftWeights) => {
     ],
   });
   evts.push({
+    id: "water1",
+    time: 11 * 60 + 30,
+    title: "Water — 16oz",
+    sub: "30 min after the shake, never before",
+    steps: ["Drink a full 16oz glass or bottle"],
+  });
+  evts.push({
     id: "snack1",
     time: 13 * 60,
     title: "Grab-and-go Snack",
@@ -153,7 +164,21 @@ const buildEvents = (isLiftDay, isSunday, letter, offsetMin, liftWeights) => {
       "If you can grab a drink: whole milk > anything else",
     ],
   });
+  evts.push({
+    id: "water2",
+    time: 14 * 60,
+    title: "Water — 16oz",
+    sub: "Refill whatever you carry",
+    steps: ["Drink 16oz"],
+  });
   if (isLiftDay) {
+    evts.push({
+      id: "water3",
+      time: 17 * 60 + 30,
+      title: "Water — 16oz + fill bottle",
+      sub: "Hydrate before lifting, sip during",
+      steps: ["Drink 16oz now", "Fill your bottle for the gym (~16oz to sip through the session)"],
+    });
     evts.push({
       id: "prelift",
       time: 18 * 60 - offsetMin,
@@ -198,6 +223,13 @@ const buildEvents = (isLiftDay, isSunday, letter, offsetMin, liftWeights) => {
       "PLUS 1 full glass whole milk",
     ],
   });
+  evts.push({
+    id: "water4",
+    time: 21 * 60 + 15,
+    title: "Water — 8–12oz",
+    sub: "Last one, taper so you sleep through",
+    steps: ["Drink 8–12oz"],
+  });
   return evts.sort((a, b) => a.time - b.time);
 };
 
@@ -224,6 +256,7 @@ function GainCoach() {
     startDate: null,
     totals: { cal: 0, shakes: 0, workouts: 0 },
     pantry: { ...FULL_PANTRY },
+    liftHistory: [],
   });
   const [toast, setToast] = useState(null);
   const [loaded, setLoaded] = useState(false);
@@ -364,6 +397,9 @@ function GainCoach() {
       setToast("Logged. Same weight next time — you'll get it 💪");
     }
     setTimeout(() => setToast(null), 2500);
+    const lwNow = next.liftWeights || state.liftWeights;
+    const strTotal = ["squat", "bench", "row", "deadlift", "ohp"].reduce((a, k) => a + (lwNow[k] || 0), 0);
+    next.liftHistory = [...(state.liftHistory || []), { t: Date.now(), total: strTotal }];
     const allDone = events.every((e) => (e.id === "lift" ? true : checks[e.id] === true));
     if (allDone && state.lastFullDay !== todayKey()) {
       next.streak = (state.streak || 0) + 1;
@@ -454,27 +490,36 @@ function GainCoach() {
   const daysIn = state.weights.length ? Math.max(1, Math.round((Date.now() - state.weights[0].t) / 864e5)) : 0;
 
   const Chart = () => {
-    if (pts.length < 2)
-      return <p style={{ fontSize: 13, color: "#777", margin: 0 }}>Log at least 2 weigh-ins to see the graph.</p>;
-    const vals = pts.map((p) => p.lbs);
-    const min = Math.min(...vals, state.startWeight ?? Infinity) - 2;
-    const max = Math.max(...vals) + 2;
-    const t0 = pts[0].t,
-      t1 = pts[pts.length - 1].t || t0 + 1;
+    const sPts = (state.liftHistory || []).filter((p) => p.t >= cutoff);
+    if (pts.length < 2 && sPts.length < 2)
+      return <p style={{ fontSize: 13, color: "#777", margin: 0 }}>Log 2 weigh-ins (or finish 2 workouts) to see the graph.</p>;
     const W = 340, H = 150, P = 14;
-    const X = (t) => P + ((t - t0) / (t1 - t0 || 1)) * (W - 2 * P);
-    const Y = (v) => H - P - ((v - min) / (max - min)) * (H - 2 * P);
-    const line = pts.map((p) => `${X(p.t)},${Y(p.lbs)}`).join(" ");
+    const times = [...pts.map((p) => p.t), ...sPts.map((p) => p.t)];
+    const t0 = Math.min(...times), t1 = Math.max(...times);
+    const X = (t) => P + ((t - t0) / ((t1 - t0) || 1)) * (W - 2 * P);
+    const mkLine = (arr, key) => {
+      if (arr.length < 2) return null;
+      const vals = arr.map((p) => p[key]);
+      const lo = Math.min(...vals), hi = Math.max(...vals);
+      const span = (hi - lo) || 1;
+      const Y = (v) => H - P - ((v - lo) / span) * (H - 2 * P) * 0.9 - 6;
+      return { pts: arr.map((p) => `${X(p.t)},${Y(p[key])}`).join(" "), dots: arr.map((p) => [X(p.t), Y(p[key])]) };
+    };
+    const wLine = mkLine(pts, "lbs");
+    const sLine = mkLine(sPts, "total");
     return (
-      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", display: "block" }}>
-        {state.startWeight != null && (
-          <line x1={P} x2={W - P} y1={Y(state.startWeight)} y2={Y(state.startWeight)} stroke="#BBB" strokeDasharray="5 4" strokeWidth="1.5" />
-        )}
-        <polyline points={line} fill="none" stroke="#2743F0" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" />
-        {pts.map((p, i) => (
-          <circle key={i} cx={X(p.t)} cy={Y(p.lbs)} r="4.5" fill="#0E0E10" />
-        ))}
-      </svg>
+      <>
+        <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", display: "block" }}>
+          {sLine && <polyline points={sLine.pts} fill="none" stroke="#C6470E" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />}
+          {sLine && sLine.dots.map(([x, y], i) => <circle key={"s" + i} cx={x} cy={y} r="4" fill="#C6470E" />)}
+          {wLine && <polyline points={wLine.pts} fill="none" stroke="#2743F0" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" />}
+          {wLine && wLine.dots.map(([x, y], i) => <circle key={"w" + i} cx={x} cy={y} r="4.5" fill="#2743F0" />)}
+        </svg>
+        <div style={{ display: "flex", gap: 16, marginTop: 8 }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: "#2743F0" }}>● Bodyweight</span>
+          <span style={{ fontSize: 12, fontWeight: 700, color: "#C6470E" }}>● Strength (total bar weight)</span>
+        </div>
+      </>
     );
   };
 
