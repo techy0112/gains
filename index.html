@@ -7,12 +7,12 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="GAINS">
 <title>GAINS</title>
-<!-- v5.2 -->
+<!-- v5.3 -->
 <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%232743F0'/%3E%3Ctext x='50' y='68' font-size='50' font-weight='900' text-anchor='middle' fill='white' font-family='Helvetica'%3EG%3C/text%3E%3C/svg%3E">
 <style>
   html, body { margin: 0; padding: 0; background: #F5F4EF; position: fixed; inset: 0; overflow: hidden; width: 100%; height: 100%; }
   #root { position: fixed; inset: 0; }
-  #root > div { padding-top: max(env(safe-area-inset-top), 64px) !important; }
+  #scroller { padding-top: max(env(safe-area-inset-top), 64px) !important; }
   * { -webkit-tap-highlight-color: transparent; }
 </style>
 <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -464,10 +464,11 @@ function GainCoach() {
 
   const C = { ink: "#0E0E10", paper: "#F5F4EF", blue: "#2743F0", gray: "#6E6E72", line: "#E4E2DA", warn: "#C6470E" };
   const S = {
-    app: { fontFamily: "'Helvetica Neue', Helvetica, Arial, sans-serif", background: C.paper, color: C.ink, position: "fixed", top: 0, bottom: TABBAR_H, left: 0, right: 0, margin: "0 auto", maxWidth: 480, overflowY: "auto", WebkitOverflowScrolling: "touch", paddingTop: TOP_PAD, boxSizing: "border-box" },
+    app: { fontFamily: "'Helvetica Neue', Helvetica, Arial, sans-serif", background: C.paper, color: C.ink, position: "fixed", top: 0, bottom: 0, left: 0, right: 0, margin: "0 auto", maxWidth: 480, display: "flex", flexDirection: "column", overflow: "hidden" },
+    scroll: { flex: 1, minHeight: 0, overflowY: "auto", WebkitOverflowScrolling: "touch", paddingTop: TOP_PAD },
     h1: { fontSize: 34, fontWeight: 900, letterSpacing: "-0.03em", textTransform: "uppercase", margin: "0 0 2px" },
     header: { padding: "22px 18px 6px" },
-    tabbar: { position: "fixed", bottom: 0, left: 0, right: 0, maxWidth: 480, margin: "0 auto", display: "flex", alignItems: "flex-start", height: TABBAR_H, background: C.ink, borderRadius: "16px 16px 0 0", zIndex: 10, paddingBottom: "env(safe-area-inset-bottom)", boxSizing: "border-box" },
+    tabbar: { flexShrink: 0, display: "flex", alignItems: "flex-start", background: C.ink, borderRadius: "16px 16px 0 0", paddingBottom: "env(safe-area-inset-bottom)" },
     tabBtn: (a) => ({ flex: 1, height: 55, padding: 0, background: "none", border: "none", color: a ? C.paper : "#6E6E72", fontWeight: 800, fontSize: 12, letterSpacing: "0.08em", textTransform: "uppercase", cursor: "pointer", borderTop: a ? `3px solid ${C.blue}` : "3px solid transparent" }),
     btn: { padding: "12px 18px", background: C.blue, color: "#fff", border: `2px solid ${C.ink}`, borderRadius: 10, fontWeight: 800, fontSize: 15, cursor: "pointer" },
     input: { flex: 1, padding: "12px 14px", fontSize: 16, border: `2px solid ${C.ink}`, borderRadius: 10, background: "#fff", minWidth: 0 },
@@ -524,6 +525,7 @@ function GainCoach() {
 
   return (
     <div style={S.app}>
+      <div id="scroller" style={S.scroll}>
       {tab === "home" && (
         <>
           <div style={S.header}>
@@ -799,6 +801,7 @@ function GainCoach() {
       )}
 
       <div style={{ height: 24 }} />
+      </div>
 
       <nav style={S.tabbar}>
         <button style={S.tabBtn(tab === "home")} onClick={() => setTab("home")}>Today</button>
