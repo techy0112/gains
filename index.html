@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-title" content="GAINS">
 <meta name="theme-color" content="#F5F4EF">
 <title>GAINS</title>
-<!-- v6.8 -->
+<!-- v6.9 -->
 <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%232743F0'/%3E%3Ctext x='50' y='68' font-size='50' font-weight='900' text-anchor='middle' fill='white' font-family='Helvetica'%3EG%3C/text%3E%3C/svg%3E">
 <style>
   /* ==============================================================
@@ -85,8 +85,8 @@
     /* Deliberately NOT env(safe-area-inset-bottom). Reserving the 34pt inset
        left the bottom third of this bar as empty black. Home Screen use only,
        so there is no Safari toolbar to clear — the bar hugs its labels with an
-       zero padding. The bar's height is set entirely by tabBtn's `height` (45pt),
-       which centres a 10px label with ~17.5pt of black either side. At 45pt this now clears the 44pt iOS touch-target minimum. */
+       zero padding. The bar's height is set entirely by tabBtn's `height` (70pt),
+       which centres a 10px label with ~30pt of black either side. Comfortably clears the 44pt iOS touch-target minimum. */
     padding-bottom: 0;
   }
 
@@ -301,7 +301,7 @@ const C = { ink: "#0E0E10", paper: "#F5F4EF", blue: "#2743F0", gray: "#6E6E72", 
 const S = {
   h1: { fontSize: 34, fontWeight: 900, letterSpacing: "-0.03em", textTransform: "uppercase", margin: "0 0 2px" },
   header: { padding: "22px 18px 6px" },
-  tabBtn: (a) => ({ flex: 1, height: 45, display: "flex", alignItems: "center", justifyContent: "center", padding: 0, background: "none", border: "none", color: a ? C.paper : C.gray, fontWeight: 800, fontSize: 10, lineHeight: 1, letterSpacing: "0.05em", textTransform: "uppercase", cursor: "pointer" }),
+  tabBtn: (a) => ({ flex: 1, height: 70, display: "flex", alignItems: "center", justifyContent: "center", padding: 0, background: "none", border: "none", color: a ? C.paper : C.gray, fontWeight: 800, fontSize: 10, lineHeight: 1, letterSpacing: "0.05em", textTransform: "uppercase", cursor: "pointer" }),
   btn: { padding: "12px 18px", background: C.blue, color: "#fff", border: `2px solid ${C.ink}`, borderRadius: 10, fontWeight: 800, fontSize: 15, cursor: "pointer" },
   input: { flex: 1, padding: "12px 14px", fontSize: 16, border: `2px solid ${C.ink}`, borderRadius: 10, background: "#fff", minWidth: 0 },
   card: { background: "#fff", border: `2px solid ${C.ink}`, borderRadius: 14, margin: "12px 14px", padding: 16, boxShadow: `4px 4px 0 ${C.ink}` },
