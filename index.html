@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-title" content="GAINS">
 <meta name="theme-color" content="#F5F4EF">
 <title>GAINS</title>
-<!-- v6.2 -->
+<!-- v6.3 -->
 <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%232743F0'/%3E%3Ctext x='50' y='68' font-size='50' font-weight='900' text-anchor='middle' fill='white' font-family='Helvetica'%3EG%3C/text%3E%3C/svg%3E">
 <style>
   /* ==============================================================
@@ -82,12 +82,13 @@
     display: flex;
     background: #0E0E10;
     border-radius: 16px 16px 0 0;
-    /* The full 34pt home-indicator inset is what Apple's own tab bars reserve,
-       but it left ~half this bar as dead black below the labels. The indicator
-       itself only occupies roughly 8-13pt up from the screen edge, so trimming
-       12pt still clears it comfortably and buys back real estate. The 6px floor
-       is for phones with no indicator, where the inset is already 0. */
-    padding-bottom: max(calc(env(safe-area-inset-bottom) - 12px), 6px);
+    /* Deliberately NOT env(safe-area-inset-bottom). Reserving the 34pt inset
+       left the bottom third of this bar as empty black. Home Screen use only,
+       so there is no Safari toolbar to clear — the bar hugs its labels with an
+       even 10px of black above and below, and nothing more. The home indicator
+       lands right at the label baseline; if it ever reads as cramped, this is
+       the one number to raise. */
+    padding-bottom: 0;
   }
 
   input, button, select, textarea { font-family: inherit; }
@@ -301,7 +302,7 @@ const C = { ink: "#0E0E10", paper: "#F5F4EF", blue: "#2743F0", gray: "#6E6E72", 
 const S = {
   h1: { fontSize: 34, fontWeight: 900, letterSpacing: "-0.03em", textTransform: "uppercase", margin: "0 0 2px" },
   header: { padding: "22px 18px 6px" },
-  tabBtn: (a) => ({ position: "relative", flex: 1, padding: "11px 0 9px", background: "none", border: "none", color: a ? C.paper : C.gray, fontWeight: 800, fontSize: 11, letterSpacing: "0.06em", textTransform: "uppercase", cursor: "pointer" }),
+  tabBtn: (a) => ({ position: "relative", flex: 1, padding: "10px 0 10px", background: "none", border: "none", color: a ? C.paper : C.gray, fontWeight: 800, fontSize: 11, letterSpacing: "0.06em", textTransform: "uppercase", cursor: "pointer" }),
   pill: { position: "absolute", top: 3, left: "50%", transform: "translateX(-50%)", width: 22, height: 4, borderRadius: 3, background: C.blue },
   btn: { padding: "12px 18px", background: C.blue, color: "#fff", border: `2px solid ${C.ink}`, borderRadius: 10, fontWeight: 800, fontSize: 15, cursor: "pointer" },
   input: { flex: 1, padding: "12px 14px", fontSize: 16, border: `2px solid ${C.ink}`, borderRadius: 10, background: "#fff", minWidth: 0 },
