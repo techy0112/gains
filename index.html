@@ -4,15 +4,90 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="GAINS">
+<meta name="theme-color" content="#F5F4EF">
 <title>GAINS</title>
-<!-- v5.7 -->
+<!-- v6.1 -->
 <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%232743F0'/%3E%3Ctext x='50' y='68' font-size='50' font-weight='900' text-anchor='middle' fill='white' font-family='Helvetica'%3EG%3C/text%3E%3C/svg%3E">
 <style>
-  html, body { margin: 0; padding: 0; background: #F5F4EF; -webkit-overflow-scrolling: touch; }
-  #scroller { padding-top: max(env(safe-area-inset-top), 64px) !important; }
-  * { -webkit-tap-highlight-color: transparent; }
+  /* ==============================================================
+     LAYOUT SHELL — read this before changing anything in here.
+
+     The whole app is one fixed, full-screen flex column:
+
+       .app      position:fixed; inset:0    <- exactly the visible viewport
+         |- .scroll   flex:1; overflow-y:auto   <- the ONLY scrolling element
+         |- .tabbar   flex:0 0 auto             <- a normal flex child
+
+     Two consequences, and they are the whole point:
+
+     1. The tab bar is a flex SIBLING of the scroll area, not
+        position:fixed. Content therefore cannot render underneath it,
+        so there is no bottom spacer and no magic clearance number to
+        keep in sync. (The old build had a 120px spacer for a 92px bar
+        = 62px of dead space at the bottom of every screen.)
+
+     2. Nothing uses 100vh. On iOS, 100vh is the LARGE viewport — it
+        ignores the browser chrome — so a 100vh shell is always taller
+        than what you can actually see. position:fixed + inset:0 is
+        sized to the visible viewport in both standalone and Safari.
+
+     Safe areas are applied in exactly ONE place each:
+        top    -> .scroll  padding-top
+        bottom -> .tabbar  padding-bottom
+     Do not add safe-area padding anywhere else, and do not floor the
+     top inset to a magic minimum — env() is already 59px on a notched
+     iPhone in standalone and 0 in Safari, which is correct both times.
+     ============================================================== */
+
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  html, body { margin: 0; padding: 0; height: 100%; }
+
+  body {
+    background: #0E0E10;         /* behind the shell, so no white ever flashes */
+    overscroll-behavior: none;   /* kill document rubber-banding */
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    color: #0E0E10;
+  }
+
+  .app {
+    position: fixed;
+    inset: 0;
+    max-width: 480px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    background: #F5F4EF;
+    overflow: hidden;
+  }
+
+  .scroll {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+    /* status-bar-style:default already keeps us below the clock/battery/
+       camera, so this inset is 0 in standalone. The floor is just breathing
+       room, and the inset still does the right thing if the style ever goes
+       back to black-translucent. */
+    padding-top: max(env(safe-area-inset-top), 10px);
+    /* the last card must never sit flush against the tab bar */
+    padding-bottom: 28px;
+  }
+
+  .tabbar {
+    flex: 0 0 auto;
+    display: flex;
+    background: #0E0E10;
+    border-radius: 16px 16px 0 0;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  input, button, select, textarea { font-family: inherit; }
+  /* 16px minimum on inputs stops iOS from zooming the page on focus */
+  input { font-size: 16px; }
 </style>
 <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -34,9 +109,57 @@ window.storage = {
 };
 </script>
 <script type="text/babel">
-const { useState, useEffect, useRef } = React;
+const { useState, useEffect, useRef, useMemo } = React;
 
-// ================= LIFT DEFINITIONS =================
+const SAVE_KEY = "gain-coach-v3";
+const T = (h, m) => h * 60 + m;
+
+// ================= FALL 2026 CLASS SCHEDULE =================
+// Sun=0 Mon=1 Tue=2 Wed=3 Thu=4 Fri=5 Sat=6
+const SEMESTER = { start: "2026-08-31", end: "2026-12-19" };
+const CLASSES = [
+  { code: "RUSS-144", short: "Russian", days: { 1: [T(11, 20), T(12, 35)], 3: [T(11, 20), T(13, 0)], 4: [T(11, 20), T(12, 35)] } },
+  { code: "WRT-100", short: "Writing", days: { 1: [T(12, 55), T(14, 10)], 4: [T(12, 55), T(14, 10)] } },
+  { code: "JLC-104", short: "Justice", days: { 1: [T(14, 30), T(15, 45)], 4: [T(14, 30), T(15, 45)] } },
+  { code: "STAT-202", short: "Stats", days: { 2: [T(14, 30), T(15, 45)], 3: [T(14, 30), T(15, 30)], 5: [T(14, 30), T(15, 45)] } },
+  // Encounter AU only meets on these seven Mondays.
+  { code: "CORE-102", short: "Encounter", days: { 1: [T(17, 30), T(18, 45)] },
+    onlyDates: ["2026-08-31", "2026-09-21", "2026-10-05", "2026-10-19", "2026-11-02", "2026-11-16", "2026-11-30"] },
+];
+
+const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const classesOn = (d) => {
+  const s = iso(d);
+  if (s < SEMESTER.start || s > SEMESTER.end) return [];
+  const dow = d.getDay();
+  return CLASSES.filter((c) => c.days[dow] && (!c.onlyDates || c.onlyDates.includes(s)))
+    .map((c) => ({ code: c.code, short: c.short, start: c.days[dow][0], end: c.days[dow][1] }))
+    .sort((a, b) => a.start - b.start);
+};
+
+// Slide an event out of a class it would collide with.
+const clash = (t, dur, c) => t < c.end && t + dur > c.start;
+const after = (pref, dur, busy) => {
+  let t = pref, moved = null;
+  for (let i = 0; i < 8; i++) {
+    const c = busy.find((x) => clash(t, dur, x));
+    if (!c) break;
+    t = c.end + 5; moved = c.short;
+  }
+  return { t, moved };
+};
+const before = (pref, dur, busy) => {
+  let t = pref, moved = null;
+  for (let i = 0; i < 8; i++) {
+    const c = busy.find((x) => clash(t, dur, x));
+    if (!c) break;
+    t = c.start - dur - 10; moved = c.short;
+  }
+  return { t, moved };
+};
+const lastEndBefore = (t, busy) => busy.reduce((a, c) => (c.end <= t ? Math.max(a, c.end) : a), -Infinity);
+
+// ================= LIFTS =================
 const LIFTS = {
   A: [
     { id: "squat", name: "Squat", scheme: "3 × 5", inc: 5 },
@@ -52,38 +175,36 @@ const LIFTS = {
   ],
 };
 const DEFAULT_WEIGHTS = { squat: 45, bench: 45, row: 65, deadlift: 95, ohp: 45, pullup: 0, curl: 15 };
+const BARBELL_LIFTS = ["squat", "bench", "row", "deadlift", "ohp"];
+const BODYWEIGHT_LIFTS = ["plank", "pullup"];
 
-const todayKey = () => {
-  const d = new Date();
-  return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
-};
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const CALS = { shake1: 1100, snack1: 400, prelift: 100, lift: 0, shake2: 1600, snack2: 450, weighin: 0, water1: 0, water2: 0, water3: 0, water4: 0 };
-const TOASTS = {
-  shake1: "+1,100 cal banked 🥤",
-  snack1: "+400 cal banked 🥜",
-  prelift: "Fueled up ⛽",
-  lift: "Workout done — bar goes up 5 lbs next time 🏋️",
-  shake2: "+1,600 cal banked 🍽️",
-  snack2: "+450 cal banked 🌙",
-  weighin: "Logged. Data = gains 📈",
-  water1: "Hydrated 💧",
-  water2: "Hydrated 💧",
-  water3: "Hydrated 💧",
-  water4: "Hydrated 💧",
-};
+const todayKey = () => iso(new Date());
+const yesterdayKey = () => iso(new Date(Date.now() - 864e5));
 
+const CALS = { shake1: 1000, snack1: 400, prelift: 100, lift: 0, shake2: 1600, snack2: 450, weighin: 0, water1: 0, water2: 0, water3: 0, water4: 0 };
+const TOASTS = {
+  shake1: "+1,000 cal banked 🥤", snack1: "+400 cal banked 🥜", prelift: "Fueled up ⛽",
+  shake2: "+1,600 cal banked 🍽️", snack2: "+450 cal banked 🌙", weighin: "Logged. Data = gains 📈",
+  water1: "Hydrated 💧", water2: "Hydrated 💧", water3: "Hydrated 💧", water4: "Hydrated 💧",
+};
+const CORE_EVENTS = ["shake1", "shake2", "lift"];
+
+// ================= FRIDGE =================
+const tgt = (q) => `https://www.target.com/s?searchTerm=${encodeURIComponent(q)}`;
 const PANTRY = [
-  { id: "milk", name: "Whole milk", unit: "cups", pkg: 16, pkgLabel: "1 gallon", brand: "Any brand · 1 gallon jug", price: 4, perDay: 5, buy: "https://www.amazon.com/s?k=whole+milk+gallon" },
-  { id: "oats", name: "Rolled oats", unit: "cups", pkg: 15, pkgLabel: "42oz canister", brand: "Quaker Old Fashioned · 42oz", price: 6, perDay: 1.5, buy: "https://www.amazon.com/s?k=quaker+old+fashioned+oats+42oz" },
-  { id: "pb", name: "Peanut butter", unit: "tbsp", pkg: 72, pkgLabel: "40oz jar", brand: "Jif or Skippy · 40oz jar", price: 8, perDay: 4, buy: "https://www.amazon.com/s?k=jif+creamy+peanut+butter+40oz" },
-  { id: "bananas", name: "Bananas", unit: "", pkg: 7, pkgLabel: "1 bunch", brand: "1–2 bunches, slightly green", price: 2, perDay: 2, buy: "https://www.amazon.com/s?k=fresh+bananas" },
-  { id: "whey", name: "Whey protein", unit: "scoops", pkg: 29, pkgLabel: "2lb tub", brand: "ON Gold Standard · 2lb (or Nutricost)", price: 40, perDay: 2, buy: "https://www.amazon.com/s?k=optimum+nutrition+gold+standard+whey+2lb" },
-  { id: "honey", name: "Honey", unit: "tbsp", pkg: 24, pkgLabel: "12oz bottle", brand: "Any brand · 12oz squeeze bottle", price: 5, perDay: 2, buy: "https://www.amazon.com/s?k=honey+12oz+bottle" },
-  { id: "creatine", name: "Creatine", unit: "tsp", pkg: 200, pkgLabel: "1kg bag", brand: "BulkSupplements monohydrate · 1kg", price: 25, perDay: 1, buy: "https://www.amazon.com/dp/B00E9M4XEE" },
-  { id: "snacks", name: "Trail mix / bars", unit: "servings", pkg: 14, pkgLabel: "big bag + box", brand: "Planters/Kirkland mix 2lb + Clif box", price: 15, perDay: 2, buy: "https://www.amazon.com/s?k=planters+trail+mix+2lb" },
+  { id: "milk", name: "Whole milk", unit: "cups", pkg: 12, brand: "Good & Gather Whole Milk · 3 quart cartons", price: 4, perDay: 5, lowAt: 1, buy: tgt("whole milk quart") },
+  { id: "oats", name: "Quick oats", unit: "cups", pkg: 15, brand: "Quaker Quick 1-Minute Oats · 42oz", price: 6, perDay: 1.5, buy: tgt("quaker quick 1 minute oats 42oz") },
+  { id: "pb", name: "Peanut butter", unit: "tbsp", pkg: 72, brand: "Jif Creamy · 40oz", price: 8, perDay: 4, buy: tgt("jif creamy peanut butter 40oz") },
+  { id: "bananas", name: "Bananas", unit: "", pkg: 12, brand: "2 bunches, slightly green", price: 3, perDay: 2.4, buy: tgt("bananas") },
+  { id: "whey", name: "Whey protein", unit: "scoops", pkg: 29, brand: "ON Gold Standard · 2lb", price: 40, perDay: 2, buy: tgt("optimum nutrition gold standard whey 2lb") },
+  { id: "honey", name: "Honey", unit: "tbsp", pkg: 24, brand: "Good & Gather Honey · 12oz", price: 5, perDay: 2, buy: tgt("honey 12 oz") },
+  { id: "creatine", name: "Creatine", unit: "tsp", pkg: 80, brand: "Creatine monohydrate · 400g tub", price: 20, perDay: 1, buy: tgt("creatine monohydrate powder") },
+  { id: "snacks", name: "Trail mix / bars", unit: "servings", pkg: 14, brand: "Trail mix 2lb + Clif box", price: 15, perDay: 2, buy: tgt("trail mix") },
 ];
 const FULL_PANTRY = Object.fromEntries(PANTRY.map((i) => [i.id, i.pkg]));
+const GEAR = [{ id: "shaker", name: "32oz shaker bottle", brand: "BlenderBottle Classic · 32oz", price: 9, buy: tgt("blenderbottle classic 32 oz") }];
+
 const CONSUME = {
   shake1: { milk: 2, oats: 0.75, pb: 2, bananas: 1, whey: 1, honey: 1, creatine: 1 },
   shake2: { milk: 2, oats: 0.75, pb: 2, bananas: 1, whey: 1, honey: 1 },
@@ -91,794 +212,664 @@ const CONSUME = {
   snack2: { snacks: 1, milk: 1 },
   prelift: { bananas: 1 },
 };
-const MAPS_URL = "https://maps.apple.com/?q=grocery+store";
+
 const VIDEOS = {
-  squat: { id: "vmNPOjaGrVE" },
-  bench: { id: "gRVjAtPip0Y" },
-  deadlift: { id: "wYREQkVtvEc" },
-  ohp: { id: "eNFXEEdfQp4" },
-  row: { id: "G8l_8chR5BE" },
-  pullup: { id: "jFmCrA6fo78" },
-  curl: { q: "dumbbell curl proper form" },
-  plank: { q: "plank proper form" },
+  squat: { id: "vmNPOjaGrVE" }, bench: { id: "gRVjAtPip0Y" }, deadlift: { id: "wYREQkVtvEc" },
+  ohp: { id: "eNFXEEdfQp4" }, row: { id: "G8l_8chR5BE" }, pullup: { id: "jFmCrA6fo78" },
+  curl: { q: "dumbbell curl proper form" }, plank: { q: "plank proper form" },
 };
-const videoSrc = (id) => {
-  const v = VIDEOS[id];
-  return v && v.id ? `https://www.youtube.com/embed/${v.id}` : null;
-};
-const videoLink = (id) => {
-  const v = VIDEOS[id];
-  return v && v.q ? `https://www.youtube.com/results?search_query=${encodeURIComponent(v.q)}` : null;
-};
+const videoSrc = (id) => (VIDEOS[id] && VIDEOS[id].id ? `https://www.youtube.com/embed/${VIDEOS[id].id}` : null);
+const videoLink = (id) => (VIDEOS[id] && VIDEOS[id].q ? `https://www.youtube.com/results?search_query=${encodeURIComponent(VIDEOS[id].q)}` : null);
+
 const fmt = (mins) => {
   let h = Math.floor(mins / 60);
-  const m = mins % 60;
-  const ap = h >= 12 ? "pm" : "am";
+  const m = ((mins % 60) + 60) % 60;
+  const ap = h >= 12 && h < 24 ? "pm" : "am";
+  h = ((h % 24) + 24) % 24;
   h = h % 12 || 12;
   return `${h}:${m.toString().padStart(2, "0")}${ap}`;
 };
 
-const buildEvents = (isLiftDay, isSunday, letter, offsetMin, liftWeights) => {
-  const evts = [];
-  if (isSunday) {
-    evts.push({
-      id: "weighin",
-      time: 10 * 60 + 55,
-      title: "Weigh In",
-      sub: "Before the shake, after the bathroom — same conditions every week",
-      steps: ["Step on the scale", "Log the number in the Progress tab"],
-    });
-  }
-  evts.push({
-    id: "shake1",
-    time: 11 * 60,
-    title: "Make Shake #1",
-    sub: "Creatine goes in THIS one",
-    steps: [
-      "Pour 2 cups whole milk into blender",
-      "Add 3/4 cup rolled oats",
-      "Add 2 tbsp peanut butter",
-      "Add 1 banana (frozen = better)",
-      "Add 1 scoop whey protein",
-      "Add 1 tbsp honey",
-      "Add 1 tsp (5g) creatine",
-      "Blend 60 seconds. Drink it all.",
-    ],
-  });
-  evts.push({
-    id: "water1",
-    time: 11 * 60 + 30,
-    title: "Water — 16oz",
-    sub: "30 min after the shake, never before",
-    steps: ["Drink a full 16oz glass or bottle"],
-  });
-  evts.push({
-    id: "snack1",
-    time: 13 * 60,
-    title: "Grab-and-go Snack",
-    sub: "Pocket food — you're in class/moving",
-    steps: [
-      "Option 1: 1 Clif bar + 1 sandwich bag of trail mix (~1/2 cup)",
-      "Option 2: 2 tbsp peanut butter on 6 crackers (bag it in the morning)",
-      "Option 3: 1 big handful Planters peanuts (~1/3 cup) + 1 granola bar",
-      "If you can grab a drink: whole milk > anything else",
-    ],
-  });
-  evts.push({
-    id: "water2",
-    time: 14 * 60,
-    title: "Water — 16oz",
-    sub: "Refill whatever you carry",
-    steps: ["Drink 16oz"],
-  });
+// ================= SCHEDULE =================
+const SHAKE = ["2 cups whole milk", "3/4 cup quick oats", "2 tbsp peanut butter", "1 scoop whey", "1 tbsp honey"];
+
+const buildEvents = (date, letter, offsetMin, liftWeights) => {
+  const dow = date.getDay();
+  const busy = classesOn(date);
+  const isLiftDay = [1, 3, 5].includes(dow);
+  const out = [];
+  let last = -Infinity;
+  const seq = (pref, dur) => {
+    const r = after(Math.max(pref, last + 10), dur, busy);
+    last = r.t;
+    return r;
+  };
+
+  // The workout anchors the evening, so place it before the events around it.
+  let liftT = null, liftMoved = null;
   if (isLiftDay) {
-    evts.push({
-      id: "water3",
-      time: 17 * 60 + 30,
-      title: "Water — 16oz + fill bottle",
-      sub: "Hydrate before lifting, sip during",
-      steps: ["Drink 16oz now", "Fill your bottle for the gym (~16oz to sip through the session)"],
-    });
-    evts.push({
-      id: "prelift",
-      time: 18 * 60 - offsetMin,
-      title: `Head to Gym (${offsetMin} min heads-up)`,
-      sub: "Fuel up if you feel low",
-      steps: ["Eat 1 banana OR 1 granola bar if energy is low", "Fill water bottle", "Get to the gym"],
-    });
-    evts.push({
-      id: "lift",
-      time: 18 * 60,
-      title: `Workout ${letter}`,
-      sub: "Exact weights below · rest 2-3 min between sets",
-      steps: LIFTS[letter].map((l) => {
-        const w = liftWeights[l.id];
-        if (l.id === "pullup") return `${l.name} — ${l.scheme}`;
-        if (l.id === "plank") return `${l.name} — ${l.scheme}`;
-        return `${l.name} — ${l.scheme} @ ${w} lbs`;
-      }),
-    });
+    const r = after(T(18, 0), 75, busy);
+    liftT = r.t; liftMoved = r.moved;
   }
-  evts.push({
-    id: "shake2",
-    time: 19 * 60,
-    title: "Make Shake #2 + Eat Dinner",
-    sub: isLiftDay ? "Post-workout — most important shake of the day" : "Dinner shake",
-    steps: [
-      "Same shake: 2 cups whole milk, 3/4 cup oats, 2 tbsp PB, 1 banana, 1 scoop whey, 1 tbsp honey",
-      "NO creatine in this one (already had it at 11am)",
-      "Blend 60 seconds",
-      "Eat your normal dinner too",
-      "Add ONE upgrade to dinner: extra rice, 1 tbsp olive oil, or cheese",
-    ],
-  });
-  evts.push({
-    id: "snack2",
-    time: 20 * 60 + 30,
-    title: "Bedtime Snack",
-    sub: "Eating before bed = free gains",
-    steps: [
-      "1 big handful trail mix or peanuts (~1/3 cup)",
-      "OR 1 spoon peanut butter straight from the jar",
-      "PLUS 1 full glass whole milk",
-    ],
-  });
-  evts.push({
-    id: "water4",
-    time: 21 * 60 + 15,
-    title: "Water — 8–12oz",
-    sub: "Last one, taper so you sleep through",
-    steps: ["Drink 8–12oz"],
-  });
-  return evts.sort((a, b) => a.time - b.time);
+
+  if (dow === 0) {
+    const r = seq(T(10, 55), 5);
+    out.push({ id: "weighin", time: r.t, moved: r.moved, title: "Weigh In", sub: "Before the shake, after the bathroom", steps: ["Step on the scale", "Log it below"] });
+  }
+  {
+    const r = seq(T(11, 0), 10);
+    out.push({ id: "shake1", time: r.t, moved: r.moved, title: "Shake #1", sub: "Creatine goes in THIS one",
+      steps: [...SHAKE.map((x, i) => (i === 0 ? "Fill bottle: " + x : "Add " + x)), "Add 1 tsp (5g) creatine", "Shake 30 sec, drink it all", "Eat 1 banana with it"] });
+  }
+  { const r = seq(T(11, 30), 2); out.push({ id: "water1", time: r.t, moved: r.moved, title: "Water — 16oz", sub: "", steps: ["Drink 16oz"] }); }
+  {
+    const r = seq(T(13, 0), 10);
+    out.push({ id: "snack1", time: r.t, moved: r.moved, title: "Snack", sub: "Pocket food",
+      steps: ["1 Clif bar + handful of trail mix", "or 2 tbsp PB on 6 crackers", "or handful of peanuts + granola bar"] });
+  }
+  { const r = seq(T(14, 0), 2); out.push({ id: "water2", time: r.t, moved: r.moved, title: "Water — 16oz", sub: "", steps: ["Drink 16oz"] }); }
+
+  if (isLiftDay) {
+    const w3 = before(liftT - 30, 2, busy);
+    out.push({ id: "water3", time: w3.t, moved: w3.moved, title: "Water — 16oz + fill bottle", sub: "", steps: ["Drink 16oz", "Fill your bottle for the gym"] });
+    const pre = Math.max(liftT - offsetMin, lastEndBefore(liftT, busy));
+    out.push({ id: "prelift", time: pre, moved: null, title: "Head to Gym", sub: "", steps: ["1 banana or granola bar if low", "Fill water bottle", "Go"] });
+    out.push({ id: "lift", time: liftT, moved: liftMoved, title: `Workout ${letter}`, sub: "rest 2-3 min between sets",
+      steps: LIFTS[letter].map((l) => (BODYWEIGHT_LIFTS.includes(l.id) ? `${l.name} — ${l.scheme}` : `${l.name} — ${l.scheme} @ ${liftWeights[l.id]} lbs`)) });
+    last = liftT + 75;
+  }
+  const s2 = seq(T(19, 0), 15);
+  out.push({ id: "shake2", time: s2.t, moved: s2.moved, title: "Shake #2 + Dinner", sub: "No creatine in this one",
+    steps: [...SHAKE.map((x, i) => (i === 0 ? "Fill bottle: " + x : "Add " + x)), "Shake 30 sec", "Eat 1 banana with it", "Eat your normal dinner too", "Add one upgrade: extra rice, olive oil, or cheese"] });
+  // the last two hang off the dinner shake, not the clock, so a late gym night
+  // doesn't stack a bedtime snack 15 minutes after a 1,600-calorie meal
+  const n2 = seq(Math.max(T(20, 30), s2.t + 75), 5);
+  out.push({ id: "snack2", time: n2.t, moved: n2.moved, title: "Bedtime Snack", sub: "", steps: ["Handful of trail mix or peanuts", "or a spoon of PB", "+ 1 glass whole milk"] });
+  const w4 = seq(Math.max(T(21, 15), n2.t + 30), 2);
+  out.push({ id: "water4", time: w4.t, moved: w4.moved, title: "Water — 8–12oz", sub: "", steps: ["Drink 8–12oz"] });
+
+  return out.sort((a, b) => a.time - b.time);
 };
 
-const TOP_PAD = "max(env(safe-area-inset-top), 64px)";
-const TABBAR_H = "calc(58px + env(safe-area-inset-bottom))";
+// ================= THEME =================
+const C = { ink: "#0E0E10", paper: "#F5F4EF", blue: "#2743F0", gray: "#6E6E72", line: "#E4E2DA", warn: "#C6470E" };
+const S = {
+  h1: { fontSize: 34, fontWeight: 900, letterSpacing: "-0.03em", textTransform: "uppercase", margin: "0 0 2px" },
+  header: { padding: "22px 18px 6px" },
+  tabBtn: (a) => ({ position: "relative", flex: 1, padding: "16px 0 14px", background: "none", border: "none", color: a ? C.paper : C.gray, fontWeight: 800, fontSize: 12, letterSpacing: "0.08em", textTransform: "uppercase", cursor: "pointer" }),
+  pill: { position: "absolute", top: 6, left: "50%", transform: "translateX(-50%)", width: 22, height: 4, borderRadius: 3, background: C.blue },
+  btn: { padding: "12px 18px", background: C.blue, color: "#fff", border: `2px solid ${C.ink}`, borderRadius: 10, fontWeight: 800, fontSize: 15, cursor: "pointer" },
+  input: { flex: 1, padding: "12px 14px", fontSize: 16, border: `2px solid ${C.ink}`, borderRadius: 10, background: "#fff", minWidth: 0 },
+  card: { background: "#fff", border: `2px solid ${C.ink}`, borderRadius: 14, margin: "12px 14px", padding: 16, boxShadow: `4px 4px 0 ${C.ink}` },
+  label: { fontSize: 11, fontWeight: 800, letterSpacing: "0.14em", textTransform: "uppercase", color: C.blue, margin: "0 0 8px" },
+  banner: (col, bg) => ({ margin: "10px 14px", padding: "12px 16px", borderRadius: 12, border: `2px solid ${col}`, background: bg, fontSize: 14, fontWeight: 700, color: col }),
+};
 
+// ================= COMPONENTS (module scope) =================
+// These MUST stay outside GainCoach. Defined inside, every render creates a
+// new component identity, React remounts the subtree, and the weigh-in input
+// loses focus — the iOS keyboard closed after each keystroke.
+class ErrorBoundary extends React.Component {
+  constructor(p) { super(p); this.state = { err: null }; }
+  static getDerivedStateFromError(err) { return { err }; }
+  render() {
+    if (!this.state.err) return this.props.children;
+    return (
+      <div style={{ padding: 28 }}>
+        <h1 style={S.h1}>Something broke</h1>
+        <p style={{ fontSize: 14, color: C.gray, fontWeight: 600 }}>{String(this.state.err && this.state.err.message)}</p>
+        <button style={{ ...S.btn, width: "100%", marginTop: 12 }} onClick={() => window.location.reload()}>Reload</button>
+      </div>
+    );
+  }
+}
+
+const Chart = ({ pts, sPts }) => {
+  if (pts.length < 2 && sPts.length < 2)
+    return <p style={{ fontSize: 13, color: C.gray, margin: 0 }}>Log 2 weigh-ins (or finish 2 workouts) to see the graph.</p>;
+  const W = 340, H = 150, P = 14, LBL = 26;
+  const times = [...pts.map((p) => p.t), ...sPts.map((p) => p.t)];
+  const t0 = Math.min(...times), t1 = Math.max(...times);
+  const X = (t) => P + LBL + ((t - t0) / ((t1 - t0) || 1)) * (W - 2 * P - LBL);
+  const mk = (arr, key) => {
+    if (arr.length < 2) return null;
+    const vals = arr.map((p) => p[key]);
+    const lo = Math.min(...vals), hi = Math.max(...vals);
+    const span = (hi - lo) || 1;
+    const Y = (v) => H - P - ((v - lo) / span) * (H - 2 * P) * 0.9 - 6;
+    return { lo, hi, Y, poly: arr.map((p) => `${X(p.t)},${Y(p[key])}`).join(" "), dots: arr.map((p) => [X(p.t), Y(p[key])]) };
+  };
+  const w = mk(pts, "lbs"), s = mk(sPts, "total"), ax = w || s;
+  return (
+    <>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", display: "block" }}>
+        {ax && <text x="2" y={ax.Y(ax.hi) + 4} fontSize="10" fontWeight="700" fill={C.gray}>{Math.round(ax.hi)}</text>}
+        {ax && <text x="2" y={ax.Y(ax.lo) + 4} fontSize="10" fontWeight="700" fill={C.gray}>{Math.round(ax.lo)}</text>}
+        {s && <polyline points={s.poly} fill="none" stroke={C.warn} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />}
+        {s && s.dots.map(([x, y], i) => <circle key={"s" + i} cx={x} cy={y} r="4" fill={C.warn} />)}
+        {w && <polyline points={w.poly} fill="none" stroke={C.blue} strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" />}
+        {w && w.dots.map(([x, y], i) => <circle key={"w" + i} cx={x} cy={y} r="4.5" fill={C.blue} />)}
+      </svg>
+      <div style={{ display: "flex", gap: 16, marginTop: 8, flexWrap: "wrap" }}>
+        <span style={{ fontSize: 12, fontWeight: 700, color: C.blue }}>● Bodyweight</span>
+        <span style={{ fontSize: 12, fontWeight: 700, color: C.warn }}>● Strength</span>
+      </div>
+    </>
+  );
+};
+
+const EventCard = ({ e, mark, past, active, weightInput, setWeightInput, onLogWeighIn, onComplete, onToggle, onSkip }) => {
+  if (!past && !mark) return null;
+  const base = { margin: "10px 14px", borderRadius: 14, border: `2px solid ${C.ink}`, background: "#fff", transition: "all 0.4s ease", overflow: "hidden" };
+  if (mark) {
+    const skipped = mark === "skip";
+    // The lift is deliberately not un-checkable by tapping: undoing it would
+    // have to roll back the weight progression and the workout counter.
+    const undoable = e.id !== "lift";
+    return (
+      <div style={{ ...base, opacity: 0.35, transform: "scale(0.94)", padding: "10px 14px", display: "flex", alignItems: "center", gap: 10, cursor: undoable ? "pointer" : "default" }}
+        onClick={undoable ? onToggle : undefined}>
+        <span style={{ fontWeight: 900, color: skipped ? C.gray : C.blue }}>{skipped ? "✕" : "✓"}</span>
+        <span style={{ fontSize: 14, fontWeight: 700, textDecoration: "line-through" }}>{fmt(e.time)} — {e.title}{skipped ? " (skipped)" : ""}</span>
+      </div>
+    );
+  }
+  return (
+    <div style={{ ...base, padding: 16, boxShadow: active ? `5px 5px 0 ${C.blue}` : `4px 4px 0 ${C.ink}`, opacity: active ? 1 : 0.75 }}>
+      <span style={{ fontFamily: "'Courier New', monospace", fontWeight: 700, fontSize: 13, color: active ? C.blue : C.gray }}>
+        {fmt(e.time)} {active ? "· NOW" : "· catch up"}{e.moved ? ` · after ${e.moved}` : ""}
+      </span>
+      <h2 style={{ fontSize: 22, fontWeight: 900, margin: "4px 0 2px", letterSpacing: "-0.02em" }}>{e.title}</h2>
+      {e.sub && <p style={{ fontSize: 13, color: C.gray, margin: "0 0 10px", fontWeight: 600 }}>{e.sub}</p>}
+      <ol style={{ margin: "8px 0 0", paddingLeft: 20 }}>
+        {e.steps.map((s, i) => <li key={i} style={{ fontSize: 15, lineHeight: 1.5, marginBottom: 4 }}>{s}</li>)}
+      </ol>
+      {e.id === "weighin" && (
+        <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
+          <input style={S.input} type="number" inputMode="decimal" placeholder="lbs" value={weightInput} onChange={(ev) => setWeightInput(ev.target.value)} />
+          <button style={S.btn} onClick={onLogWeighIn}>Log ✓</button>
+        </div>
+      )}
+      {e.id === "lift" && (
+        <div style={{ marginTop: 14 }}>
+          <button style={{ ...S.btn, width: "100%" }} onClick={() => onComplete(true)}>Hit all reps ✓</button>
+          <button style={{ ...S.btn, width: "100%", marginTop: 8, background: "#fff", color: C.ink }} onClick={() => onComplete(false)}>Missed some reps</button>
+        </div>
+      )}
+      {e.id !== "weighin" && e.id !== "lift" && <button style={{ ...S.btn, width: "100%", marginTop: 14 }} onClick={onToggle}>Done ✓</button>}
+      <button style={{ width: "100%", marginTop: 6, padding: 10, background: "none", border: "none", color: C.gray, fontWeight: 700, fontSize: 13, cursor: "pointer" }} onClick={onSkip}>Skip today</button>
+    </div>
+  );
+};
+
+// ================= APP =================
 function GainCoach() {
   const [tab, setTab] = useState("home");
-  const [nowMin, setNowMin] = useState(() => {
-    const d = new Date();
-    return d.getHours() * 60 + d.getMinutes();
-  });
+  const [clock, setClock] = useState(() => new Date());
   const [state, setState] = useState({
-    checks: {},
-    checksDate: todayKey(),
-    nextWorkout: "A",
-    startWeight: null,
-    weights: [],
-    offsetMin: 10,
-    notifOn: false,
-    liftWeights: { ...DEFAULT_WEIGHTS },
-    streak: 0,
-    lastFullDay: null,
-    startDate: null,
-    totals: { cal: 0, shakes: 0, workouts: 0 },
-    pantry: { ...FULL_PANTRY },
-    liftHistory: [],
+    checks: {}, checksDate: todayKey(), nextWorkout: "A", startWeight: null, weights: [],
+    offsetMin: 10, notifOn: false, liftWeights: { ...DEFAULT_WEIGHTS }, streak: 0, lastFullDay: null,
+    startDate: null, startLifts: null, totals: { cal: 0, shakes: 0, workouts: 0 },
+    pantry: { ...FULL_PANTRY }, liftHistory: [],
   });
   const [toast, setToast] = useState(null);
   const [loaded, setLoaded] = useState(false);
   const [weightInput, setWeightInput] = useState("");
   const [startInput, setStartInput] = useState("");
   const [range, setRange] = useState("ALL");
-  const measureVh = () => Math.max(window.innerHeight || 0, (document.documentElement && document.documentElement.clientHeight) || 0, (window.visualViewport && window.visualViewport.height) || 0);
-  const [vh, setVh] = useState(() => (typeof window !== "undefined" ? measureVh() : 800));
   const [liftTab, setLiftTab] = useState("A");
   const [openLift, setOpenLift] = useState(null);
   const notified = useRef({});
+  const toastTimer = useRef(null);
+  const scrollRef = useRef(null);
 
-  const day = new Date().getDay();
+  const nowMin = clock.getHours() * 60 + clock.getMinutes();
+  const day = clock.getDay();
   const isLiftDay = [1, 3, 5].includes(day);
-  const isSunday = day === 0;
+  const todayClasses = useMemo(() => classesOn(clock), [clock.toDateString()]);
 
   useEffect(() => {
     (async () => {
       try {
-        const r = await window.storage.get("gain-coach-v3");
+        const r = await window.storage.get(SAVE_KEY);
         if (r && r.value) {
           const s = JSON.parse(r.value);
           if (s.checksDate !== todayKey()) {
-            s.checks = {};
-            s.checksDate = todayKey();
+            s.checks = {}; s.checksDate = todayKey();
+            if (s.lastFullDay !== yesterdayKey() && s.lastFullDay !== todayKey()) s.streak = 0;
           }
-          setState((p) => ({ ...p, ...s, liftWeights: { ...DEFAULT_WEIGHTS, ...(s.liftWeights || {}) }, pantry: { ...FULL_PANTRY, ...(s.pantry || {}) } }));
+          setState((p) => ({ ...p, ...s,
+            liftWeights: { ...DEFAULT_WEIGHTS, ...(s.liftWeights || {}) },
+            pantry: { ...FULL_PANTRY, ...(s.pantry || {}) },
+            totals: { cal: 0, shakes: 0, workouts: 0, ...(s.totals || {}) } }));
         }
       } catch (e) {}
       setLoaded(true);
     })();
   }, []);
 
-  const save = async (next) => {
-    setState(next);
-    try {
-      await window.storage.set("gain-coach-v3", JSON.stringify(next));
-    } catch (e) {
-      console.error(e);
-    }
-  };
+  // Persistence follows state, so back-to-back updates can't overwrite each other.
+  useEffect(() => {
+    if (!loaded) return;
+    window.storage.set(SAVE_KEY, JSON.stringify(state)).catch((e) => console.error(e));
+  }, [state, loaded]);
+
+  useEffect(() => { const t = setInterval(() => setClock(new Date()), 20000); return () => clearInterval(t); }, []);
+  useEffect(() => {
+    if (!loaded) return;
+    const k = todayKey();
+    setState((p) => {
+      if (p.checksDate === k) return p;
+      const streak = p.lastFullDay === yesterdayKey() || p.lastFullDay === k ? p.streak : 0;
+      return { ...p, checks: {}, checksDate: k, streak };
+    });
+  }, [loaded, clock.toDateString()]);
+  useEffect(() => () => clearTimeout(toastTimer.current), []);
+  useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = 0; }, [tab]);
+
+  const events = useMemo(
+    () => buildEvents(clock, state.nextWorkout, state.offsetMin, state.liftWeights),
+    [clock.toDateString(), state.nextWorkout, state.offsetMin, state.liftWeights]
+  );
 
   useEffect(() => {
-    const t = setInterval(() => {
-      const d = new Date();
-      setNowMin(d.getHours() * 60 + d.getMinutes());
-    }, 20000);
-    return () => clearInterval(t);
-  }, []);
-
-  useEffect(() => {
-    const upd = () => setVh(measureVh());
-    upd();
-    window.addEventListener("resize", upd);
-    window.addEventListener("orientationchange", upd);
-    if (window.visualViewport) window.visualViewport.addEventListener("resize", upd);
-    const t = setTimeout(upd, 300);
-    return () => {
-      window.removeEventListener("resize", upd);
-      window.removeEventListener("orientationchange", upd);
-      if (window.visualViewport) window.visualViewport.removeEventListener("resize", upd);
-      clearTimeout(t);
-    };
-  }, []);
-
-  const events = buildEvents(isLiftDay, isSunday, state.nextWorkout, state.offsetMin, state.liftWeights);
-
-  useEffect(() => {
-    if (!state.notifOn || typeof Notification === "undefined") return;
+    if (!state.notifOn || typeof Notification === "undefined" || Notification.permission !== "granted") return;
     events.forEach((e) => {
-      if (nowMin >= e.time && !state.checks[e.id] && !notified.current[e.id + todayKey()]) {
-        notified.current[e.id + todayKey()] = true;
-        if (Notification.permission === "granted") {
-          try {
-            new Notification("⏰ " + e.title, { body: e.steps[0] });
-          } catch (err) {}
-        }
+      const k = e.id + todayKey();
+      if (nowMin >= e.time && nowMin - e.time <= 45 && !state.checks[e.id] && !notified.current[k]) {
+        notified.current[k] = true;
+        try { new Notification("⏰ " + e.title, { body: e.steps[0] }); } catch (err) {}
       }
     });
-  }, [nowMin, state.notifOn, state.checks]);
+  }, [nowMin, state.notifOn, state.checks, events]);
+
+  const showToast = (msg) => {
+    setToast(msg);
+    clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), 2500);
+  };
+
+  const isResolved = (checks, id) => checks[id] === true || checks[id] === "skip";
+  const applyStreak = (next) => {
+    const all = events.every((e) => isResolved(next.checks, e.id));
+    const core = events.filter((e) => CORE_EVENTS.includes(e.id)).every((e) => next.checks[e.id] === true);
+    return all && core && next.lastFullDay !== todayKey()
+      ? { ...next, streak: (next.streak || 0) + 1, lastFullDay: todayKey() }
+      : next;
+  };
 
   const toggleCheck = (id) => {
-    const was = state.checks[id] === true;
-    const checks = { ...state.checks, [id]: !state.checks[id] };
-    const next = { ...state, checks, checksDate: todayKey() };
-    const t = { ...(state.totals || { cal: 0, shakes: 0, workouts: 0 }) };
-    if (!was) {
-      t.cal += CALS[id] || 0;
-      if (id === "shake1" || id === "shake2") t.shakes += 1;
-      if (id === "lift") t.workouts += 1;
-      setToast(TOASTS[id] || "Done ✓");
-      setTimeout(() => setToast(null), 2500);
-    } else {
-      t.cal -= CALS[id] || 0;
-      if (id === "shake1" || id === "shake2") t.shakes = Math.max(0, t.shakes - 1);
-      if (id === "lift") t.workouts = Math.max(0, t.workouts - 1);
-    }
-    next.totals = t;
-    const pan = { ...(state.pantry || FULL_PANTRY) };
-    const use = CONSUME[id] || {};
-    Object.entries(use).forEach(([k, v]) => {
-      pan[k] = Math.max(0, (pan[k] ?? FULL_PANTRY[k]) + (was ? v : -v));
+    if (state.checks[id] !== true) showToast(TOASTS[id] || "Done ✓");
+    setState((prev) => {
+      const was = prev.checks[id] === true;
+      const dir = was ? -1 : 1;
+      const totals = { ...prev.totals };
+      totals.cal = Math.max(0, (totals.cal || 0) + dir * (CALS[id] || 0));
+      if (id === "shake1" || id === "shake2") totals.shakes = Math.max(0, (totals.shakes || 0) + dir);
+      const pantry = { ...prev.pantry };
+      Object.entries(CONSUME[id] || {}).forEach(([k, v]) => {
+        // clamped at both ends so undo can never inflate stock past a full package
+        pantry[k] = Math.min(FULL_PANTRY[k], Math.max(0, (pantry[k] ?? FULL_PANTRY[k]) - dir * v));
+      });
+      return applyStreak({ ...prev, checks: { ...prev.checks, [id]: !was }, checksDate: todayKey(), totals, pantry });
     });
-    next.pantry = pan;
-    if (id === "lift" && !state.checks[id]) {
-      next.nextWorkout = state.nextWorkout === "A" ? "B" : "A";
-    }
-    // streak: all events done today
-    const allDone = events.every((e) => checks[e.id] === true);
-    if (allDone && state.lastFullDay !== todayKey()) {
-      next.streak = (state.streak || 0) + 1;
-      next.lastFullDay = todayKey();
-    }
-    save(next);
   };
 
   const completeLift = (success) => {
-    const checks = { ...state.checks, lift: true };
-    const next = { ...state, checks, checksDate: todayKey() };
-    const t = { ...(state.totals || { cal: 0, shakes: 0, workouts: 0 }) };
-    t.workouts += 1;
-    next.totals = t;
-    const pan = { ...(state.pantry || FULL_PANTRY) };
-    const use = CONSUME[id] || {};
-    Object.entries(use).forEach(([k, v]) => {
-      pan[k] = Math.max(0, (pan[k] ?? FULL_PANTRY[k]) + (was ? v : -v));
+    if (state.checks.lift === true) return;
+    showToast(success ? "All reps hit — bar goes up next time 🏋️" : "Logged. Same weight next time 💪");
+    setState((prev) => {
+      if (prev.checks.lift === true) return prev;
+      const justDid = prev.nextWorkout;
+      let liftWeights = prev.liftWeights;
+      if (success) {
+        liftWeights = { ...prev.liftWeights };
+        LIFTS[justDid].forEach((l) => { if (l.inc > 0) liftWeights[l.id] = (liftWeights[l.id] || 0) + l.inc; });
+      }
+      const total = BARBELL_LIFTS.reduce((a, k) => a + (liftWeights[k] || 0), 0);
+      return applyStreak({ ...prev,
+        checks: { ...prev.checks, lift: true }, checksDate: todayKey(),
+        totals: { ...prev.totals, workouts: (prev.totals.workouts || 0) + 1 },
+        liftWeights, nextWorkout: justDid === "A" ? "B" : "A",
+        liftHistory: [...(prev.liftHistory || []), { t: Date.now(), total }] });
     });
-    next.pantry = pan;
-    next.nextWorkout = state.nextWorkout === "A" ? "B" : "A";
-    if (success) {
-      const lw = { ...state.liftWeights };
-      LIFTS[state.nextWorkout].forEach((l) => {
-        if (l.inc > 0) lw[l.id] = (lw[l.id] || 0) + l.inc;
-      });
-      next.liftWeights = lw;
-      setToast("All reps hit — bar goes up next time 🏋️");
-    } else {
-      setToast("Logged. Same weight next time — you'll get it 💪");
-    }
-    setTimeout(() => setToast(null), 2500);
-    const lwNow = next.liftWeights || state.liftWeights;
-    const strTotal = ["squat", "bench", "row", "deadlift", "ohp"].reduce((a, k) => a + (lwNow[k] || 0), 0);
-    next.liftHistory = [...(state.liftHistory || []), { t: Date.now(), total: strTotal }];
-    const allDone = events.every((e) => (e.id === "lift" ? true : checks[e.id] === true));
-    if (allDone && state.lastFullDay !== todayKey()) {
-      next.streak = (state.streak || 0) + 1;
-      next.lastFullDay = todayKey();
-    }
-    save(next);
   };
 
-  const skipEvent = (id) => {
-    const checks = { ...state.checks, [id]: "skip" };
-    save({ ...state, checks, checksDate: todayKey() });
-  };
+  const skipEvent = (id) => setState((prev) => applyStreak({ ...prev, checks: { ...prev.checks, [id]: "skip" }, checksDate: todayKey() }));
 
-  const restock = (id) => {
-    const item = PANTRY.find((i) => i.id === id);
-    const pan = { ...(state.pantry || FULL_PANTRY) };
-    pan[id] = (pan[id] || 0) + item.pkg;
-    save({ ...state, pantry: pan });
-    setToast(`${item.name} restocked 🛒`);
-    setTimeout(() => setToast(null), 2000);
-  };
-
-  const lowItems = PANTRY.filter((i) => ((state.pantry?.[i.id] ?? i.pkg) / i.perDay) <= 3);
-
-  const logWeight = () => {
+  const logWeight = (alsoCheck) => {
     const lbs = parseFloat(weightInput);
     if (!lbs || lbs <= 0) return;
-    const next = { ...state, weights: [...state.weights, { t: Date.now(), lbs }] };
-    if (next.startWeight == null) next.startWeight = lbs;
-    save(next);
+    showToast(TOASTS.weighin);
+    setState((prev) => {
+      const next = { ...prev, weights: [...prev.weights, { t: Date.now(), lbs }], startWeight: prev.startWeight == null ? lbs : prev.startWeight };
+      if (!alsoCheck) return next;
+      next.checks = { ...prev.checks, weighin: true };
+      next.checksDate = todayKey();
+      return applyStreak(next);
+    });
     setWeightInput("");
   };
 
   const setStart = () => {
     const lbs = parseFloat(startInput);
     if (!lbs || lbs <= 0) return;
-    save({ ...state, startWeight: lbs });
+    setState((p) => ({ ...p, startWeight: lbs }));
     setStartInput("");
   };
-
   const setLift = (id, val) => {
     const v = parseFloat(val);
     if (isNaN(v)) return;
-    save({ ...state, liftWeights: { ...state.liftWeights, [id]: v } });
+    setState((p) => ({ ...p, liftWeights: { ...p.liftWeights, [id]: v } }));
   };
-
+  const restock = (item) => {
+    setState((p) => ({ ...p, pantry: { ...p.pantry, [item.id]: Math.min(item.pkg, (p.pantry[item.id] || 0) + item.pkg) } }));
+    showToast(`${item.name} restocked 🛒`);
+  };
+  const startPlan = () => setState((p) => ({ ...p, startDate: new Date().toISOString().slice(0, 10), startLifts: { ...p.liftWeights } }));
   const askNotifPermission = async () => {
-    if (typeof Notification === "undefined") {
-      alert("Notifications not supported here — the timeline still updates live.");
-      return;
-    }
+    if (typeof Notification === "undefined") { alert("Notifications aren't supported here."); return; }
     const p = await Notification.requestPermission();
-    save({ ...state, notifOn: p === "granted" });
+    setState((s) => ({ ...s, notifOn: p === "granted" }));
   };
 
-  const status = (e) => {
-    if (state.checks[e.id]) return "done";
-    if (nowMin >= e.time) {
-      const firstLive = events.find((x) => nowMin >= x.time && !state.checks[x.id]);
-      return firstLive && firstLive.id === e.id ? "active" : "overdue";
-    }
-    return "future";
-  };
-  const nextUp = events.find((e) => nowMin < e.time);
-  const dayN = state.startDate ? Math.floor((Date.now() - new Date(state.startDate).getTime()) / 864e5) + 1 : null;
-  const weekN = dayN ? Math.floor((dayN - 1) / 7) + 1 : null;
-  const calsToday = events.reduce((a, e) => a + (state.checks[e.id] === true ? (CALS[e.id] || 0) : 0), 0);
-  const startPlan = () => save({ ...state, startDate: new Date().toISOString().slice(0, 10), startLifts: { ...state.liftWeights } });
-  let milestone = null;
-  if (dayN && [7, 14, 30, 60, 90].includes(dayN)) milestone = `🔥 Day ${dayN}. Most people quit by now. Not you.`;
-  const gainNum = latest != null && state.startWeight != null ? latest - state.startWeight : 0;
-  if (!milestone && gainNum >= 5) milestone = `💪 +${Math.floor(gainNum / 5) * 5} lbs gained since Day 1`;
-  const liveCount = events.filter((e) => state.checks[e.id]).length;
-
-  // ---- auto-coach: flat over last 14 days? ----
-  const twoWeeksAgo = Date.now() - 14 * 864e5;
-  const recent = state.weights.filter((p) => p.t >= twoWeeksAgo);
-  const coachFlat =
-    state.weights.length >= 3 &&
-    recent.length >= 2 &&
-    recent[recent.length - 1].lbs - recent[0].lbs < 1;
-
+  // ---- derived ----
   const rangeMs = { "1W": 7 * 864e5, "1M": 30 * 864e5, "3M": 90 * 864e5, ALL: Infinity }[range];
   const cutoff = Date.now() - rangeMs;
   const pts = state.weights.filter((p) => p.t >= cutoff);
+  const sPts = (state.liftHistory || []).filter((p) => p.t >= cutoff);
   const latest = state.weights.length ? state.weights[state.weights.length - 1].lbs : null;
   const delta = latest != null && state.startWeight != null ? (latest - state.startWeight).toFixed(1) : null;
   const daysIn = state.weights.length ? Math.max(1, Math.round((Date.now() - state.weights[0].t) / 864e5)) : 0;
+  const dayN = state.startDate ? Math.floor((Date.now() - new Date(state.startDate).getTime()) / 864e5) + 1 : null;
+  const weekN = dayN ? Math.floor((dayN - 1) / 7) + 1 : null;
+  const calsToday = events.reduce((a, e) => a + (state.checks[e.id] === true ? CALS[e.id] || 0 : 0), 0);
+  const doneCount = events.filter((e) => state.checks[e.id] === true).length;
+  const resolvedCount = events.filter((e) => isResolved(state.checks, e.id)).length;
+  const firstLive = events.find((x) => nowMin >= x.time && !state.checks[x.id]);
 
-  const Chart = () => {
-    const sPts = (state.liftHistory || []).filter((p) => p.t >= cutoff);
-    if (pts.length < 2 && sPts.length < 2)
-      return <p style={{ fontSize: 13, color: "#777", margin: 0 }}>Log 2 weigh-ins (or finish 2 workouts) to see the graph.</p>;
-    const W = 340, H = 150, P = 14;
-    const times = [...pts.map((p) => p.t), ...sPts.map((p) => p.t)];
-    const t0 = Math.min(...times), t1 = Math.max(...times);
-    const X = (t) => P + ((t - t0) / ((t1 - t0) || 1)) * (W - 2 * P);
-    const mkLine = (arr, key) => {
-      if (arr.length < 2) return null;
-      const vals = arr.map((p) => p[key]);
-      const lo = Math.min(...vals), hi = Math.max(...vals);
-      const span = (hi - lo) || 1;
-      const Y = (v) => H - P - ((v - lo) / span) * (H - 2 * P) * 0.9 - 6;
-      return { pts: arr.map((p) => `${X(p.t)},${Y(p[key])}`).join(" "), dots: arr.map((p) => [X(p.t), Y(p[key])]) };
-    };
-    const wLine = mkLine(pts, "lbs");
-    const sLine = mkLine(sPts, "total");
-    return (
-      <>
-        <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", display: "block" }}>
-          {sLine && <polyline points={sLine.pts} fill="none" stroke="#C6470E" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />}
-          {sLine && sLine.dots.map(([x, y], i) => <circle key={"s" + i} cx={x} cy={y} r="4" fill="#C6470E" />)}
-          {wLine && <polyline points={wLine.pts} fill="none" stroke="#2743F0" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" />}
-          {wLine && wLine.dots.map(([x, y], i) => <circle key={"w" + i} cx={x} cy={y} r="4.5" fill="#2743F0" />)}
-        </svg>
-        <div style={{ display: "flex", gap: 16, marginTop: 8 }}>
-          <span style={{ fontSize: 12, fontWeight: 700, color: "#2743F0" }}>● Bodyweight</span>
-          <span style={{ fontSize: 12, fontWeight: 700, color: "#C6470E" }}>● Strength (total bar weight)</span>
-        </div>
-      </>
-    );
-  };
+  const gain = latest != null && state.startWeight != null ? latest - state.startWeight : 0;
+  let milestone = null;
+  if (dayN && [7, 14, 30, 60, 90].includes(dayN)) milestone = `🔥 Day ${dayN}. Most people quit by now. Not you.`;
+  if (!milestone && gain >= 5) milestone = `💪 +${Math.floor(gain / 5) * 5} lbs gained since Day 1`;
 
-  const C = { ink: "#0E0E10", paper: "#F5F4EF", blue: "#2743F0", gray: "#6E6E72", line: "#E4E2DA", warn: "#C6470E" };
-  const S = {
-    app: { fontFamily: "'Helvetica Neue', Helvetica, Arial, sans-serif", background: C.paper, color: C.ink, minHeight: "100vh", maxWidth: 480, margin: "0 auto" },
-    scroll: { paddingTop: TOP_PAD },
-    h1: { fontSize: 34, fontWeight: 900, letterSpacing: "-0.03em", textTransform: "uppercase", margin: "0 0 2px" },
-    header: { padding: "22px 18px 6px" },
-    tabbar: { position: "fixed", bottom: 0, left: 0, right: 0, maxWidth: 480, margin: "0 auto", display: "flex", background: C.ink, borderRadius: "16px 16px 0 0", zIndex: 10, paddingBottom: "env(safe-area-inset-bottom)" },
-    tabBtn: (a) => ({ position: "relative", flex: 1, padding: "16px 0 14px", background: "none", border: "none", color: a ? C.paper : "#6E6E72", fontWeight: 800, fontSize: 12, letterSpacing: "0.08em", textTransform: "uppercase", cursor: "pointer" }),
-    pill: { position: "absolute", top: 6, left: "50%", transform: "translateX(-50%)", width: 22, height: 4, borderRadius: 3, background: C.blue },
-    btn: { padding: "12px 18px", background: C.blue, color: "#fff", border: `2px solid ${C.ink}`, borderRadius: 10, fontWeight: 800, fontSize: 15, cursor: "pointer" },
-    input: { flex: 1, padding: "12px 14px", fontSize: 16, border: `2px solid ${C.ink}`, borderRadius: 10, background: "#fff", minWidth: 0 },
-    card: { background: "#fff", border: `2px solid ${C.ink}`, borderRadius: 14, margin: "12px 14px", padding: 16, boxShadow: `4px 4px 0 ${C.ink}` },
-    label: { fontSize: 11, fontWeight: 800, letterSpacing: "0.14em", textTransform: "uppercase", color: C.blue, margin: "0 0 8px" },
-  };
+  // rate-based, so a normal +0.75 lb/week never trips it
+  const recent = state.weights.filter((p) => p.t >= Date.now() - 14 * 864e5);
+  let coachFlat = false;
+  if (state.weights.length >= 3 && recent.length >= 2) {
+    const spanDays = (recent[recent.length - 1].t - recent[0].t) / 864e5;
+    if (spanDays >= 10) coachFlat = ((recent[recent.length - 1].lbs - recent[0].lbs) / spanDays) * 7 < 0.4;
+  }
 
-  const EventCard = ({ e }) => {
-    const st = status(e);
-    if (st === "future") return null;
-    const done = st === "done";
-    const active = st === "active";
-    const base = { margin: "10px 14px", borderRadius: 14, border: `2px solid ${C.ink}`, background: "#fff", transition: "all 0.4s ease", overflow: "hidden" };
-    if (done) {
-      const skipped = state.checks[e.id] === "skip";
-      return (
-        <div style={{ ...base, opacity: 0.35, transform: "scale(0.94)", padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 }}>
-          <span style={{ fontWeight: 900, color: skipped ? C.gray : C.blue }}>{skipped ? "✕" : "✓"}</span>
-          <span style={{ fontSize: 14, fontWeight: 700, textDecoration: "line-through" }}>{fmt(e.time)} — {e.title}{skipped ? " (skipped)" : ""}</span>
-        </div>
-      );
-    }
-    return (
-      <div style={{ ...base, padding: 16, boxShadow: active ? `5px 5px 0 ${C.blue}` : `4px 4px 0 ${C.ink}`, opacity: active ? 1 : 0.75 }}>
-        <span style={{ fontFamily: "'Courier New', monospace", fontWeight: 700, fontSize: 13, color: active ? C.blue : C.gray }}>
-          {fmt(e.time)} {st === "overdue" ? "· catch up" : "· NOW"}
-        </span>
-        <h2 style={{ fontSize: 22, fontWeight: 900, margin: "4px 0 2px", letterSpacing: "-0.02em" }}>{e.title}</h2>
-        <p style={{ fontSize: 13, color: C.gray, margin: "0 0 10px", fontWeight: 600 }}>{e.sub}</p>
-        <ol style={{ margin: 0, paddingLeft: 20 }}>
-          {e.steps.map((s, i) => (
-            <li key={i} style={{ fontSize: 15, lineHeight: 1.5, marginBottom: 4 }}>{s}</li>
-          ))}
-        </ol>
-        {e.id === "weighin" && (
-          <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
-            <input style={S.input} type="number" inputMode="decimal" placeholder="lbs" value={weightInput} onChange={(ev) => setWeightInput(ev.target.value)} />
-            <button style={S.btn} onClick={() => { logWeight(); toggleCheck(e.id); }}>Log ✓</button>
-          </div>
-        )}
-        {e.id === "lift" && (
-          <div style={{ marginTop: 14 }}>
-            <button style={{ ...S.btn, width: "100%" }} onClick={() => completeLift(true)}>Hit all reps ✓</button>
-            <button style={{ ...S.btn, width: "100%", marginTop: 8, background: "#fff", color: C.ink }} onClick={() => completeLift(false)}>Missed some reps</button>
-          </div>
-        )}
-        {e.id !== "weighin" && e.id !== "lift" && <button style={{ ...S.btn, width: "100%", marginTop: 14 }} onClick={() => toggleCheck(e.id)}>Done ✓</button>}
-        <button style={{ width: "100%", marginTop: 6, padding: "10px", background: "none", border: "none", color: C.gray, fontWeight: 700, fontSize: 13, cursor: "pointer" }} onClick={() => skipEvent(e.id)}>Skip today</button>
-      </div>
-    );
-  };
+  const lowItems = PANTRY.filter((i) => (state.pantry?.[i.id] ?? i.pkg) / i.perDay <= (i.lowAt ?? 3));
+  const nextUp = events.find((e) => nowMin < e.time);
 
-  if (!loaded) return <div style={{ ...S.app, padding: 40, textAlign: "center", fontWeight: 700 }}>Loading…</div>;
+  if (!loaded) return <div className="app"><div className="scroll" style={{ padding: 40, textAlign: "center", fontWeight: 700 }}>Loading…</div></div>;
 
   return (
-    <div style={S.app}>
-      <div id="scroller" style={S.scroll}>
-      {tab === "home" && (
-        <>
-          <div style={S.header}>
-            {dayN && (
-              <div style={{ fontSize: 15, fontWeight: 900, letterSpacing: "0.1em", color: C.blue, textTransform: "uppercase", marginBottom: 2 }}>
-                Day {dayN} · Week {weekN}
+    <div className="app">
+      <div className="scroll" ref={scrollRef}>
+        {toast && (
+          <div style={{ position: "fixed", top: "calc(env(safe-area-inset-top) + 12px)", left: 14, right: 14, maxWidth: 452, margin: "0 auto", background: C.ink, color: "#fff", padding: "12px 20px", borderRadius: 12, fontWeight: 800, fontSize: 15, zIndex: 99, boxShadow: "0 4px 14px rgba(0,0,0,0.3)", textAlign: "center" }}>{toast}</div>
+        )}
+
+        {tab === "home" && (
+          <>
+            <div style={S.header}>
+              {dayN && <div style={{ fontSize: 15, fontWeight: 900, letterSpacing: "0.1em", color: C.blue, textTransform: "uppercase", marginBottom: 2 }}>Day {dayN} · Week {weekN}</div>}
+              <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.14em", color: C.gray, textTransform: "uppercase" }}>
+                {DAYS[day]} · {fmt(nowMin)} · {doneCount}/{events.length} done{state.streak > 0 ? ` · 🔥 ${state.streak}` : ""}
               </div>
-            )}
-            <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.14em", color: C.gray, textTransform: "uppercase" }}>
-              {DAYS[day]} · {fmt(nowMin)} · {liveCount}/{events.length} done{state.streak > 0 ? ` · 🔥 ${state.streak} day streak` : ""}
-            </div>
-            <h1 style={S.h1}>{isLiftDay ? `Lift Day ${state.nextWorkout}` : "Rest & Eat"}</h1>
-            <div style={{ height: 8, borderRadius: 4, background: "#E4E2DA", marginTop: 10, overflow: "hidden" }}>
-              <div style={{ height: "100%", width: `${(liveCount / events.length) * 100}%`, background: C.blue, transition: "width 0.5s ease" }} />
-            </div>
-            {calsToday > 0 && (
-              <div style={{ fontSize: 13, fontWeight: 800, color: C.ink, marginTop: 6 }}>⚡ {calsToday.toLocaleString()} cal banked today</div>
-            )}
-          </div>
-
-          {toast && (
-            <div style={{ position: "fixed", top: "calc(env(safe-area-inset-top) + 12px)", left: "50%", transform: "translateX(-50%)", background: C.ink, color: "#fff", padding: "12px 20px", borderRadius: 12, fontWeight: 800, fontSize: 15, zIndex: 99, boxShadow: "0 4px 14px rgba(0,0,0,0.3)", whiteSpace: "nowrap" }}>
-              {toast}
-            </div>
-          )}
-
-          {!state.startDate && (
-            <div style={{ ...S.card, textAlign: "center" }}>
-              <p style={{ fontSize: 15, fontWeight: 700, margin: "0 0 12px" }}>Ready to begin?</p>
-              <button style={{ ...S.btn, width: "100%", fontSize: 17 }} onClick={startPlan}>🚀 Start Day 1</button>
-            </div>
-          )}
-
-          {coachFlat && (
-            <div style={{ margin: "10px 14px", padding: "12px 16px", borderRadius: 12, border: `2px solid ${C.warn}`, background: "#FDF1EA", fontSize: 14, fontWeight: 700, color: C.warn }}>
-              Coach: scale's been flat 2 weeks. Starting today — add 1 tbsp olive oil + a 2nd banana to each shake, and don't skip the bedtime snack.
-            </div>
-          )}
-
-          {lowItems.length > 0 && (
-            <div style={{ margin: "10px 14px", padding: "12px 16px", borderRadius: 12, border: `2px solid ${C.warn}`, background: "#FDF1EA", fontSize: 14, fontWeight: 700, color: C.warn }} onClick={() => setTab("fridge")}>
-              🛒 Running low: {lowItems.map((i) => i.name).join(", ")} — tap to restock
-            </div>
-          )}
-
-          {milestone && (
-            <div style={{ margin: "10px 14px", padding: "14px 16px", borderRadius: 12, border: `2px solid ${C.blue}`, background: "#EEF1FE", fontSize: 15, fontWeight: 800, color: C.blue, textAlign: "center" }}>
-              {milestone}
-            </div>
-          )}
-
-          {events.map((e) => (
-            <EventCard key={e.id} e={e} />
-          ))}
-
-          {nextUp && (
-            <div style={{ margin: "10px 14px", padding: "12px 16px", borderRadius: 12, border: `2px dashed ${C.gray}`, color: C.gray, fontSize: 14, fontWeight: 700 }}>
-              Up next · {fmt(nextUp.time)} — {nextUp.title} (in {Math.floor((nextUp.time - nowMin) / 60)}h {(nextUp.time - nowMin) % 60}m)
-            </div>
-          )}
-          {!nextUp && liveCount === events.length && (
-            <div style={{ ...S.card, textAlign: "center", fontWeight: 900, fontSize: 18 }}>Day complete. 💪 Growth happens tonight.</div>
-          )}
-        </>
-      )}
-
-      {tab === "progress" && (
-        <>
-          <div style={S.header}><h1 style={S.h1}>Progress</h1></div>
-
-          <div style={S.card}>
-            {state.startWeight == null ? (
-              <>
-                <p style={S.label}>Set your starting weight</p>
-                <div style={{ display: "flex", gap: 10 }}>
-                  <input style={S.input} type="number" inputMode="decimal" placeholder="lbs" value={startInput} onChange={(ev) => setStartInput(ev.target.value)} />
-                  <button style={S.btn} onClick={setStart}>Set</button>
+              <h1 style={S.h1}>{isLiftDay ? `Lift Day ${state.nextWorkout}` : "Rest & Eat"}</h1>
+              {todayClasses.length > 0 && (
+                <div style={{ fontSize: 12, fontWeight: 700, color: C.gray, marginTop: 4 }}>
+                  {todayClasses.map((c) => `${c.code} ${fmt(c.start)}`).join(" · ")}
                 </div>
-              </>
-            ) : (
-              <div style={{ display: "flex", justifyContent: "space-between", textAlign: "center" }}>
-                <div><div style={{ fontSize: 11, fontWeight: 800, color: C.gray, textTransform: "uppercase" }}>Start</div><div style={{ fontSize: 24, fontWeight: 900 }}>{state.startWeight}</div></div>
-                <div><div style={{ fontSize: 11, fontWeight: 800, color: C.gray, textTransform: "uppercase" }}>Now</div><div style={{ fontSize: 24, fontWeight: 900 }}>{latest ?? "—"}</div></div>
-                <div><div style={{ fontSize: 11, fontWeight: 800, color: C.gray, textTransform: "uppercase" }}>Gained</div><div style={{ fontSize: 24, fontWeight: 900, color: C.blue }}>{delta != null ? (delta > 0 ? "+" : "") + delta : "—"}</div></div>
-                <div><div style={{ fontSize: 11, fontWeight: 800, color: C.gray, textTransform: "uppercase" }}>Days</div><div style={{ fontSize: 24, fontWeight: 900 }}>{daysIn}</div></div>
+              )}
+              <div style={{ height: 8, borderRadius: 4, background: C.line, marginTop: 10, overflow: "hidden" }}>
+                <div style={{ height: "100%", width: `${(doneCount / events.length) * 100}%`, background: C.blue, transition: "width 0.5s ease" }} />
+              </div>
+              {calsToday > 0 && <div style={{ fontSize: 13, fontWeight: 800, marginTop: 6 }}>⚡ {calsToday.toLocaleString()} cal banked today</div>}
+            </div>
+
+            {!state.startDate && (
+              <div style={{ ...S.card, textAlign: "center" }}>
+                <p style={{ fontSize: 15, fontWeight: 700, margin: "0 0 12px" }}>Ready to begin?</p>
+                <button style={{ ...S.btn, width: "100%", fontSize: 17 }} onClick={startPlan}>🚀 Start Day 1</button>
               </div>
             )}
-          </div>
+            {coachFlat && <div style={S.banner(C.warn, "#FDF1EA")}>Scale's flat 2 weeks — add 1 tbsp olive oil + a 2nd banana to each shake.</div>}
+            {lowItems.length > 0 && (
+              <div style={{ ...S.banner(C.warn, "#FDF1EA"), cursor: "pointer" }} onClick={() => setTab("fridge")}>
+                🛒 Running low: {lowItems.map((i) => i.name).join(", ")}
+              </div>
+            )}
+            {milestone && <div style={{ ...S.banner(C.blue, "#EEF1FE"), fontSize: 15, fontWeight: 800, textAlign: "center" }}>{milestone}</div>}
 
-          <div style={S.card}>
-            <p style={S.label}>Log today's weight</p>
-            <div style={{ display: "flex", gap: 10 }}>
-              <input style={S.input} type="number" inputMode="decimal" placeholder="lbs" value={weightInput} onChange={(ev) => setWeightInput(ev.target.value)} />
-              <button style={S.btn} onClick={logWeight}>Log</button>
+            {events.map((e) => (
+              <EventCard key={e.id} e={e} mark={state.checks[e.id]} past={nowMin >= e.time}
+                active={!!firstLive && firstLive.id === e.id}
+                weightInput={weightInput} setWeightInput={setWeightInput}
+                onLogWeighIn={() => logWeight(true)} onComplete={completeLift}
+                onToggle={() => toggleCheck(e.id)} onSkip={() => skipEvent(e.id)} />
+            ))}
+
+            {nextUp && (
+              <div style={{ margin: "10px 14px", padding: "12px 16px", borderRadius: 12, border: `2px dashed ${C.gray}`, color: C.gray, fontSize: 14, fontWeight: 700 }}>
+                Up next · {fmt(nextUp.time)} — {nextUp.title} (in {Math.floor((nextUp.time - nowMin) / 60)}h {(nextUp.time - nowMin) % 60}m)
+              </div>
+            )}
+            {!nextUp && resolvedCount === events.length && (
+              <div style={{ ...S.card, textAlign: "center", fontWeight: 900, fontSize: 18 }}>Day complete. 💪</div>
+            )}
+          </>
+        )}
+
+        {tab === "lifts" && (
+          <>
+            <div style={S.header}><h1 style={S.h1}>Lifts</h1></div>
+            <div style={{ display: "flex", gap: 8, margin: "0 14px 4px" }}>
+              {["A", "B"].map((w) => (
+                <button key={w} onClick={() => { setLiftTab(w); setOpenLift(null); }}
+                  style={{ flex: 1, padding: 12, fontWeight: 900, fontSize: 15, borderRadius: 10, border: `2px solid ${C.ink}`, background: liftTab === w ? C.blue : "#fff", color: liftTab === w ? "#fff" : C.ink, cursor: "pointer" }}>Workout {w}</button>
+              ))}
             </div>
-          </div>
+            {LIFTS[liftTab].map((l) => {
+              const open = openLift === l.id;
+              const showW = !BODYWEIGHT_LIFTS.includes(l.id);
+              return (
+                <div key={l.id} style={{ ...S.card, padding: 0, overflow: "hidden" }}>
+                  <div onClick={() => setOpenLift(open ? null : l.id)} style={{ padding: 16, display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}>
+                    <div>
+                      <div style={{ fontWeight: 800, fontSize: 16 }}>{l.name}</div>
+                      <div style={{ fontSize: 13, color: C.gray, fontWeight: 600 }}>{l.scheme}{showW ? ` @ ${state.liftWeights[l.id]} lbs` : ""}</div>
+                    </div>
+                    <span style={{ fontWeight: 900, fontSize: 18, color: C.blue }}>{open ? "▲" : "▶"}</span>
+                  </div>
+                  {open && videoSrc(l.id) && (
+                    <div style={{ borderTop: `2px solid ${C.ink}` }}>
+                      <iframe src={videoSrc(l.id)} style={{ width: "100%", aspectRatio: "16/9", border: "none", display: "block" }}
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen title={l.name} />
+                    </div>
+                  )}
+                  {open && !videoSrc(l.id) && (
+                    <div style={{ borderTop: `2px solid ${C.ink}`, padding: 14 }}>
+                      <a href={videoLink(l.id)} target="_blank" rel="noopener" style={{ ...S.btn, display: "block", textAlign: "center", textDecoration: "none" }}>▶️ Form video</a>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </>
+        )}
 
-          <div style={S.card}>
-            <p style={S.label}>All-time</p>
-            <div style={{ display: "flex", justifyContent: "space-between", textAlign: "center" }}>
-              <div><div style={{ fontSize: 11, fontWeight: 800, color: C.gray, textTransform: "uppercase" }}>Cal banked</div><div style={{ fontSize: 22, fontWeight: 900, color: C.blue }}>{(state.totals?.cal || 0).toLocaleString()}</div></div>
-              <div><div style={{ fontSize: 11, fontWeight: 800, color: C.gray, textTransform: "uppercase" }}>Shakes</div><div style={{ fontSize: 22, fontWeight: 900 }}>{state.totals?.shakes || 0}</div></div>
-              <div><div style={{ fontSize: 11, fontWeight: 800, color: C.gray, textTransform: "uppercase" }}>Workouts</div><div style={{ fontSize: 22, fontWeight: 900 }}>{state.totals?.workouts || 0}</div></div>
-              <div><div style={{ fontSize: 11, fontWeight: 800, color: C.gray, textTransform: "uppercase" }}>Streak</div><div style={{ fontSize: 22, fontWeight: 900 }}>🔥{state.streak || 0}</div></div>
+        {tab === "fridge" && (
+          <>
+            <div style={S.header}><h1 style={S.h1}>Fridge</h1></div>
+            {PANTRY.map((item) => {
+              const left = state.pantry?.[item.id] ?? item.pkg;
+              const days = left / item.perDay;
+              const low = days <= (item.lowAt ?? 3);
+              return (
+                <div key={item.id} style={{ ...S.card, borderColor: low ? C.warn : C.ink }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
+                    <span style={{ fontWeight: 800, fontSize: 16 }}>{item.name}</span>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: low ? C.warn : C.gray, whiteSpace: "nowrap" }}>
+                      {low ? "⚠️ " : ""}{Math.max(0, Math.round(days))} days left
+                    </span>
+                  </div>
+                  <div style={{ height: 8, borderRadius: 4, background: C.line, margin: "10px 0", overflow: "hidden" }}>
+                    <div style={{ height: "100%", width: `${Math.min(1, left / item.pkg) * 100}%`, background: low ? C.warn : C.blue, transition: "width 0.4s" }} />
+                  </div>
+                  <div style={{ fontSize: 13, color: C.gray, marginBottom: 4 }}>~{Math.round(left * 10) / 10} {item.unit} left</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>{item.brand} · ~${item.price}</div>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button style={{ ...S.btn, flex: 1, padding: 10 }} onClick={() => restock(item)}>Bought ✓</button>
+                    <a href={item.buy} target="_blank" rel="noopener" style={{ ...S.btn, flex: 1, padding: 10, background: "#fff", color: C.ink, textAlign: "center", textDecoration: "none" }}>🎯 Target</a>
+                  </div>
+                </div>
+              );
+            })}
+
+            {GEAR.map((g) => (
+              <div key={g.id} style={S.card}>
+                <div style={{ fontWeight: 800, fontSize: 16 }}>{g.name}</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: C.gray, margin: "4px 0 10px" }}>{g.brand} · ~${g.price} · one-time</div>
+                <a href={g.buy} target="_blank" rel="noopener" style={{ ...S.btn, display: "block", padding: 10, background: "#fff", color: C.ink, textAlign: "center", textDecoration: "none" }}>🎯 Target</a>
+              </div>
+            ))}
+
+            <div style={S.card}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 15, fontWeight: 700, marginBottom: 6 }}>
+                <span>Restock low items</span><span style={{ color: C.warn }}>~${lowItems.reduce((a, i) => a + i.price, 0)}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 15, fontWeight: 700 }}>
+                <span>Everything</span><span style={{ color: C.blue }}>~${PANTRY.reduce((a, i) => a + i.price, 0)}</span>
+              </div>
             </div>
-          </div>
+          </>
+        )}
 
-          <div style={S.card}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-              <p style={{ ...S.label, margin: 0 }}>Growth chart</p>
-              <div style={{ display: "flex", gap: 4 }}>
-                {["1W", "1M", "3M", "ALL"].map((r) => (
-                  <button key={r} onClick={() => setRange(r)} style={{ padding: "5px 9px", fontSize: 11, fontWeight: 800, borderRadius: 8, border: `2px solid ${C.ink}`, background: range === r ? C.blue : "#fff", color: range === r ? "#fff" : C.ink, cursor: "pointer" }}>{r}</button>
+        {tab === "progress" && (
+          <>
+            <div style={S.header}><h1 style={S.h1}>Progress</h1></div>
+            <div style={S.card}>
+              {state.startWeight == null ? (
+                <>
+                  <p style={S.label}>Starting weight</p>
+                  <div style={{ display: "flex", gap: 10 }}>
+                    <input style={S.input} type="number" inputMode="decimal" placeholder="lbs" value={startInput} onChange={(ev) => setStartInput(ev.target.value)} />
+                    <button style={S.btn} onClick={setStart}>Set</button>
+                  </div>
+                </>
+              ) : (
+                <div style={{ display: "flex", justifyContent: "space-between", textAlign: "center" }}>
+                  {[["Start", state.startWeight], ["Now", latest ?? "—"], ["Gained", delta != null ? (delta > 0 ? "+" : "") + delta : "—"], ["Days", daysIn]].map(([k, v], i) => (
+                    <div key={k}>
+                      <div style={{ fontSize: 11, fontWeight: 800, color: C.gray, textTransform: "uppercase" }}>{k}</div>
+                      <div style={{ fontSize: 24, fontWeight: 900, color: i === 2 ? C.blue : C.ink }}>{v}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div style={S.card}>
+              <p style={S.label}>Log today's weight</p>
+              <div style={{ display: "flex", gap: 10 }}>
+                <input style={S.input} type="number" inputMode="decimal" placeholder="lbs" value={weightInput} onChange={(ev) => setWeightInput(ev.target.value)} />
+                <button style={S.btn} onClick={() => logWeight(false)}>Log</button>
+              </div>
+            </div>
+            <div style={S.card}>
+              <p style={S.label}>All-time</p>
+              <div style={{ display: "flex", justifyContent: "space-between", textAlign: "center" }}>
+                {[["Cal", (state.totals?.cal || 0).toLocaleString(), C.blue], ["Shakes", state.totals?.shakes || 0, C.ink], ["Workouts", state.totals?.workouts || 0, C.ink], ["Streak", `🔥${state.streak || 0}`, C.ink]].map(([k, v, col]) => (
+                  <div key={k}>
+                    <div style={{ fontSize: 11, fontWeight: 800, color: C.gray, textTransform: "uppercase" }}>{k}</div>
+                    <div style={{ fontSize: 22, fontWeight: 900, color: col }}>{v}</div>
+                  </div>
                 ))}
               </div>
             </div>
-            <Chart />
-            <p style={{ fontSize: 12, color: C.gray, margin: "8px 0 0" }}>Target: +0.5–1 lb/week.</p>
-          </div>
-
-          <div style={S.card}>
-            <p style={S.label}>Current lift numbers</p>
-            {Object.entries({ ...LIFTS.A.reduce((a, l) => ({ ...a, [l.id]: l }), {}), ...LIFTS.B.reduce((a, l) => ({ ...a, [l.id]: l }), {}) })
-              .filter(([id]) => !["plank", "pullup"].includes(id))
-              .map(([id, l]) => (
-                <div key={id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: `1px solid ${C.line}` }}>
-                  <span style={{ fontWeight: 600, fontSize: 15 }}>{l.name}{state.startLifts && state.liftWeights[id] > state.startLifts[id] ? <span style={{ color: C.blue, fontWeight: 900, fontSize: 13 }}> +{state.liftWeights[id] - state.startLifts[id]}</span> : null}</span>
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    key={id}
-                    defaultValue={state.liftWeights[id]}
-                    onBlur={(ev) => setLift(id, ev.target.value)}
-                    style={{ width: 70, padding: "6px 8px", fontSize: 15, fontWeight: 700, border: `2px solid ${C.ink}`, borderRadius: 8, textAlign: "right" }}
-                  />
+            <div style={S.card}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                <p style={{ ...S.label, margin: 0 }}>Growth chart</p>
+                <div style={{ display: "flex", gap: 4 }}>
+                  {["1W", "1M", "3M", "ALL"].map((r) => (
+                    <button key={r} onClick={() => setRange(r)} style={{ padding: "5px 9px", fontSize: 11, fontWeight: 800, borderRadius: 8, border: `2px solid ${C.ink}`, background: range === r ? C.blue : "#fff", color: range === r ? "#fff" : C.ink, cursor: "pointer" }}>{r}</button>
+                  ))}
+                </div>
+              </div>
+              <Chart pts={pts} sPts={sPts} />
+            </div>
+            <div style={S.card}>
+              <p style={S.label}>Current lift numbers</p>
+              {[...LIFTS.A, ...LIFTS.B].filter((l) => !BODYWEIGHT_LIFTS.includes(l.id)).map((l) => (
+                <div key={l.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: `1px solid ${C.line}` }}>
+                  <span style={{ fontWeight: 600, fontSize: 15 }}>
+                    {l.name}
+                    {state.startLifts && state.liftWeights[l.id] > state.startLifts[l.id] && (
+                      <span style={{ color: C.blue, fontWeight: 900, fontSize: 13 }}> +{state.liftWeights[l.id] - state.startLifts[l.id]}</span>
+                    )}
+                  </span>
+                  {/* keyed on the value so the field refreshes after a workout bumps it */}
+                  <input key={`${l.id}:${state.liftWeights[l.id]}`} type="number" inputMode="decimal"
+                    defaultValue={state.liftWeights[l.id]} onBlur={(ev) => setLift(l.id, ev.target.value)}
+                    style={{ width: 74, padding: "6px 8px", fontSize: 15, fontWeight: 700, border: `2px solid ${C.ink}`, borderRadius: 8, textAlign: "right" }} />
                 </div>
               ))}
-                      </div>
-        </>
-      )}
+            </div>
+          </>
+        )}
 
-      {tab === "lifts" && (
-        <>
-          <div style={S.header}><h1 style={S.h1}>Lifts</h1></div>
-          <div style={{ display: "flex", gap: 8, margin: "0 14px 4px" }}>
-            {["A", "B"].map((w) => (
-              <button key={w} onClick={() => { setLiftTab(w); setOpenLift(null); }} style={{ flex: 1, padding: "12px", fontWeight: 900, fontSize: 15, borderRadius: 10, border: `2px solid ${C.ink}`, background: liftTab === w ? C.blue : "#fff", color: liftTab === w ? "#fff" : C.ink, cursor: "pointer" }}>
-                Workout {w}
-              </button>
-            ))}
-          </div>
-          {LIFTS[liftTab].map((l) => {
-            const open = openLift === l.id;
-            const w = state.liftWeights[l.id];
-            const showW = !["plank", "pullup"].includes(l.id);
-            return (
-              <div key={l.id} style={{ ...S.card, padding: 0, overflow: "hidden" }}>
-                <div onClick={() => setOpenLift(open ? null : l.id)} style={{ padding: 16, display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}>
-                  <div>
-                    <div style={{ fontWeight: 800, fontSize: 16 }}>{l.name}</div>
-                    <div style={{ fontSize: 13, color: C.gray, fontWeight: 600 }}>{l.scheme}{showW ? ` @ ${w} lbs` : ""}</div>
-                  </div>
-                  <span style={{ fontWeight: 900, fontSize: 18, color: C.blue }}>{open ? "▲" : "▶"}</span>
-                </div>
-                {open && videoSrc(l.id) && (
-                  <div style={{ borderTop: `2px solid ${C.ink}` }}>
-                    <iframe
-                      src={videoSrc(l.id)}
-                      style={{ width: "100%", aspectRatio: "16/9", border: "none", display: "block" }}
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                      allowFullScreen
-                      title={l.name}
-                    />
-                  </div>
-                )}
-                {open && !videoSrc(l.id) && (
-                  <div style={{ borderTop: `2px solid ${C.ink}`, padding: 14 }}>
-                    <a href={videoLink(l.id)} target="_blank" rel="noopener" style={{ ...S.btn, display: "block", textAlign: "center", textDecoration: "none" }}>▶️ Watch form video on YouTube</a>
-                  </div>
-                )}
+        {tab === "settings" && (
+          <>
+            <div style={S.header}><h1 style={S.h1}>Settings</h1></div>
+            <div style={S.card}>
+              <p style={S.label}>Gym heads-up</p>
+              <p style={{ fontSize: 14, margin: "0 0 8px" }}>Alert me <b>{state.offsetMin < 60 ? `${state.offsetMin} min` : `${(state.offsetMin / 60).toFixed(1)} hr`}</b> before the workout</p>
+              <input type="range" min="0" max="300" step="5" value={state.offsetMin} onChange={(ev) => { const v = parseInt(ev.target.value); setState((p) => ({ ...p, offsetMin: v })); }} style={{ width: "100%" }} />
+            </div>
+            <div style={S.card}>
+              <p style={S.label}>Notifications</p>
+              <button style={S.btn} onClick={askNotifPermission}>{state.notifOn ? "Notifications ON ✓" : "Turn on notifications"}</button>
+            </div>
+            <div style={S.card}>
+              <p style={S.label}>Starting weight</p>
+              <div style={{ display: "flex", gap: 10 }}>
+                <input style={S.input} type="number" inputMode="decimal" placeholder={state.startWeight ? `${state.startWeight} lbs` : "lbs"} value={startInput} onChange={(ev) => setStartInput(ev.target.value)} />
+                <button style={S.btn} onClick={setStart}>Save</button>
               </div>
-            );
-          })}
-        </>
-      )}
-
-      {tab === "fridge" && (
-        <>
-          <div style={S.header}><h1 style={S.h1}>Fridge</h1></div>
-          {PANTRY.map((item) => {
-            const left = state.pantry?.[item.id] ?? item.pkg;
-            const days = item.perDay > 0 ? left / item.perDay : 99;
-            const frac = Math.min(1, left / item.pkg);
-            const low = days <= 3;
-            const buyUrl = item.buy === "maps" ? MAPS_URL : item.buy;
-            return (
-              <div key={item.id} style={{ ...S.card, borderColor: low ? C.warn : C.ink }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                  <span style={{ fontWeight: 800, fontSize: 16 }}>{item.name}</span>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: low ? C.warn : C.gray }}>
-                    {low ? "⚠️ " : ""}{Math.max(0, Math.round(days))} days left
-                  </span>
-                </div>
-                <div style={{ height: 8, borderRadius: 4, background: "#E4E2DA", margin: "10px 0", overflow: "hidden" }}>
-                  <div style={{ height: "100%", width: `${frac * 100}%`, background: low ? C.warn : C.blue, transition: "width 0.4s" }} />
-                </div>
-                <div style={{ fontSize: 13, color: C.gray, marginBottom: 4 }}>
-                  ~{Math.round(left * 10) / 10} {item.unit} left
-                </div>
-                <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>
-                  Buy: {item.brand} · ~${item.price}
-                </div>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <button style={{ ...S.btn, flex: 1, padding: "10px" }} onClick={() => restock(item.id)}>Bought one ✓</button>
-                  <a href={buyUrl} target="_blank" rel="noopener" style={{ ...S.btn, flex: 1, padding: "10px", background: "#fff", color: C.ink, textAlign: "center", textDecoration: "none" }}>🛒 Amazon</a>
-                </div>
-              </div>
-            );
-          })}
-          <div style={S.card}>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 15, fontWeight: 700, marginBottom: 6 }}>
-              <span>Restock low items now</span>
-              <span style={{ color: C.warn }}>~${lowItems.reduce((a, i) => a + i.price, 0)}</span>
             </div>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 15, fontWeight: 700 }}>
-              <span>Full restock (everything)</span>
-              <span style={{ color: C.blue }}>~${PANTRY.reduce((a, i) => a + i.price, 0)}</span>
+            <div style={S.card}>
+              <p style={S.label}>Next workout</p>
+              <p style={{ fontSize: 14, margin: "0 0 10px" }}>Next up: Workout <b>{state.nextWorkout}</b>.</p>
+              <button style={{ ...S.btn, background: "#fff", color: C.ink }} onClick={() => setState((p) => ({ ...p, nextWorkout: p.nextWorkout === "A" ? "B" : "A" }))}>Switch to {state.nextWorkout === "A" ? "B" : "A"}</button>
             </div>
-            <div style={{ fontSize: 12, color: C.gray, marginTop: 8 }}>
-              Ballpark prices — creatine and whey are the big ones but last months.
+            <div style={S.card}>
+              <p style={S.label}>Class schedule</p>
+              {[1, 2, 3, 4, 5].map((d) => {
+                const cs = CLASSES.filter((c) => c.days[d]).map((c) => `${c.code} ${fmt(c.days[d][0])}`);
+                return <div key={d} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: `1px solid ${C.line}`, fontSize: 13, gap: 10 }}>
+                  <b>{DAYS[d]}</b><span style={{ color: C.gray, textAlign: "right" }}>{cs.length ? cs.join(" · ") : "—"}</span>
+                </div>;
+              })}
             </div>
-          </div>
-        </>
-      )}
-
-      {tab === "settings" && (
-        <>
-          <div style={S.header}><h1 style={S.h1}>Settings</h1></div>
-
-          <div style={S.card}>
-            <p style={S.label}>Gym heads-up time</p>
-            <p style={{ fontSize: 14, margin: "0 0 8px" }}>
-              Alert me <b>{state.offsetMin < 60 ? `${state.offsetMin} min` : `${(state.offsetMin / 60).toFixed(1)} hr`}</b> before my 6pm workout
-            </p>
-            <input type="range" min="0" max="300" step="5" value={state.offsetMin} onChange={(ev) => save({ ...state, offsetMin: parseInt(ev.target.value) })} style={{ width: "100%" }} />
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: C.gray, fontWeight: 700 }}><span>0 min</span><span>5 hrs</span></div>
-          </div>
-
-          <div style={S.card}>
-            <p style={S.label}>Notifications</p>
-            <p style={{ fontSize: 13, color: C.gray, margin: "0 0 10px" }}>
-              In-app alerts while the app is open. Lock-screen alerts come from your iPhone Reminders.
-            </p>
-            <button style={S.btn} onClick={askNotifPermission}>{state.notifOn ? "Notifications ON ✓" : "Turn on notifications"}</button>
-          </div>
-
-          <div style={S.card}>
-            <p style={S.label}>Starting weight</p>
-            <div style={{ display: "flex", gap: 10 }}>
-              <input style={S.input} type="number" inputMode="decimal" placeholder={state.startWeight ? `${state.startWeight} lbs` : "lbs"} value={startInput} onChange={(ev) => setStartInput(ev.target.value)} />
-              <button style={S.btn} onClick={setStart}>Save</button>
-            </div>
-          </div>
-
-          <div style={S.card}>
-            <p style={S.label}>Next workout</p>
-            <p style={{ fontSize: 14, margin: "0 0 10px" }}>Next up: Workout <b>{state.nextWorkout}</b>.</p>
-            <button style={{ ...S.btn, background: "#fff", color: C.ink }} onClick={() => save({ ...state, nextWorkout: state.nextWorkout === "A" ? "B" : "A" })}>
-              Switch to {state.nextWorkout === "A" ? "B" : "A"}
-            </button>
-          </div>
-        </>
-      )}
-
-      <div style={{ height: "calc(120px + env(safe-area-inset-bottom))" }} />
+          </>
+        )}
       </div>
 
-      <nav style={S.tabbar}>
-        <button style={S.tabBtn(tab === "home")} onClick={() => setTab("home")}>{tab === "home" && <span style={S.pill} />}Today</button>
-        <button style={S.tabBtn(tab === "lifts")} onClick={() => setTab("lifts")}>{tab === "lifts" && <span style={S.pill} />}Lifts</button>
-        <button style={S.tabBtn(tab === "fridge")} onClick={() => setTab("fridge")}>{tab === "fridge" && <span style={S.pill} />}Fridge</button>
-        <button style={S.tabBtn(tab === "progress")} onClick={() => setTab("progress")}>{tab === "progress" && <span style={S.pill} />}Stats</button>
-        <button style={S.tabBtn(tab === "settings")} onClick={() => setTab("settings")}>{tab === "settings" && <span style={S.pill} />}More</button>
+      <nav className="tabbar">
+        {[["home", "Today"], ["lifts", "Lifts"], ["fridge", "Fridge"], ["progress", "Stats"], ["settings", "More"]].map(([k, lbl]) => (
+          <button key={k} style={S.tabBtn(tab === k)} onClick={() => setTab(k)}>{tab === k && <span style={S.pill} />}{lbl}</button>
+        ))}
       </nav>
     </div>
   );
 }
 
-
-const root = ReactDOM.createRoot(document.getElementById('root'));
-root.render(<GainCoach />);
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(<ErrorBoundary><GainCoach /></ErrorBoundary>);
 </script>
 </body>
 </html>
