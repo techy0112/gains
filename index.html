@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-title" content="GAINS">
 <meta name="theme-color" content="#F5F4EF">
 <title>GAINS</title>
-<!-- v7.0 -->
+<!-- v7.1 -->
 <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%232743F0'/%3E%3Ctext x='50' y='68' font-size='50' font-weight='900' text-anchor='middle' fill='white' font-family='Helvetica'%3EG%3C/text%3E%3C/svg%3E">
 <style>
   /* ==============================================================
@@ -355,8 +355,11 @@ const buildEvents = (date, offsetMin, liftWeights) => {
     const r = seq(T(16, 15), 5);
     out.push({ id: "prelift", time: r.t, moved: r.moved, title: "Afternoon Milk", sub: "150 cal · 8g", steps: ["1 cup whole milk"] });
   }
-  { const r = seq(T(19, 0), 30); out.push({ id: "dinner", time: r.t, moved: r.moved, title: "Dinner", sub: "1,155 cal · 48g",
-    steps: ["Whatever you're eating — go big", "1 tbsp olive oil over it", "1 cup whole milk"] }); }
+  // Dinner is the only feed of the seven you don't measure, so it's specified
+  // as a repeatable PLATE SHAPE rather than a number. Same plate every night
+  // makes it a constant the weekly weigh-in can actually calibrate against.
+  { const r = seq(T(19, 0), 30); out.push({ id: "dinner", time: r.t, moved: r.moved, title: "Dinner", sub: "1,155 cal · 48g · same plate every night",
+    steps: ["2 palm-size portions of the protein — chicken, beef, fish", "2 cups of the starch — rice, pasta, potatoes", "Vegetables, whatever's there", "1 tbsp olive oil over it", "1 cup whole milk", "Still hungry? Bread roll or dessert"] }); }
   { const r = seq(T(20, 0), 2); out.push({ id: "water2", time: r.t, moved: r.moved, title: "Water — 16oz", sub: "", steps: ["Drink 16oz"] }); }
   {
     const r = seq(T(21, 0), 10);
