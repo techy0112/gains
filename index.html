@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-title" content="GAINS">
 <meta name="theme-color" content="#F5F4EF">
 <title>GAINS</title>
-<!-- v7.5 -->
+<!-- v7.6 -->
 <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%232743F0'/%3E%3Ctext x='50' y='68' font-size='50' font-weight='900' text-anchor='middle' fill='white' font-family='Helvetica'%3EG%3C/text%3E%3C/svg%3E">
 <style>
   /* ==============================================================
@@ -203,7 +203,7 @@ const WORKOUTS = {
     { id: "row", name: "Barbell Row", sets: 4, reps: "8-10", inc: 5 },
     { id: "ohp", name: "Overhead Press", sets: 3, reps: "8-10", inc: 2.5 },
     { id: "pulldown", name: "Lat Pulldown", sets: 3, reps: "10-12", inc: 5 },
-    { id: "latraise", name: "Lateral Raise", sets: 3, reps: "12-15", inc: 2.5 },
+    { id: "latraise", name: "Lateral Raise", sets: 3, reps: "12-15", inc: 5 },
     { id: "pushdown", name: "Tricep Pushdown", sets: 4, reps: "10-12", inc: 2.5 },
     { id: "curl", name: "Barbell Curl", sets: 4, reps: "10-12", inc: 2.5 },
   ]},
@@ -216,14 +216,14 @@ const WORKOUTS = {
     { id: "plank", name: "Plank", sets: 3, reps: "45 sec", inc: 0 },
   ]},
   4: { name: "Upper B", lifts: [
-    { id: "incline", name: "Incline DB Press", sets: 4, reps: "8-10", inc: 2.5 },
+    { id: "incline", name: "Incline DB Press", sets: 4, reps: "8-10", inc: 5 },
     { id: "pullup", name: "Pull-ups / Assisted", sets: 4, reps: "8-10", inc: 0 },
-    { id: "dbpress", name: "DB Shoulder Press", sets: 3, reps: "8-10", inc: 2.5 },
+    { id: "dbpress", name: "DB Shoulder Press", sets: 3, reps: "8-10", inc: 5 },
     { id: "csrow", name: "Chest-Supported Row", sets: 3, reps: "10-12", inc: 5 },
     { id: "fly", name: "Cable Fly", sets: 3, reps: "12-15", inc: 2.5 },
-    { id: "reardelt", name: "Rear Delt Fly", sets: 3, reps: "12-15", inc: 2.5 },
+    { id: "reardelt", name: "Rear Delt Fly", sets: 3, reps: "12-15", inc: 5 },
     { id: "ohext", name: "Overhead Tricep Ext", sets: 4, reps: "10-12", inc: 2.5 },
-    { id: "hammer", name: "Hammer Curl", sets: 4, reps: "10-12", inc: 2.5 },
+    { id: "hammer", name: "Hammer Curl", sets: 4, reps: "10-12", inc: 5 },
   ]},
   5: { name: "Lower B", lifts: [
     { id: "deadlift", name: "Deadlift", sets: 3, reps: "5", inc: 5 },
@@ -235,11 +235,14 @@ const WORKOUTS = {
   ]},
 };
 const LIFT_DAYS = [1, 2, 4, 5];
+// Calibrated starting loads for an untrained 140 lb male, not empty-bar
+// defaults. Deadlift starts at 115 because that is roughly where a 45 lb bar
+// with 35s sits at the correct height — lighter puts you in a worse position.
 const DEFAULT_WEIGHTS = {
-  bench: 45, row: 45, ohp: 45, pulldown: 50, latraise: 10, pushdown: 25, curl: 30,
-  squat: 45, rdl: 65, legpress: 90, legcurl: 30, calf: 90, plank: 0,
-  incline: 20, pullup: 0, dbpress: 15, csrow: 30, fly: 15, reardelt: 10, ohext: 20, hammer: 15,
-  deadlift: 95, frontsquat: 45, lunge: 20, legext: 40, calfseated: 45, legraise: 0,
+  bench: 65, row: 55, ohp: 45, pulldown: 60, latraise: 10, pushdown: 30, curl: 30,
+  squat: 65, rdl: 75, legpress: 135, legcurl: 40, calf: 115, plank: 0,
+  incline: 20, pullup: 0, dbpress: 15, csrow: 40, fly: 15, reardelt: 10, ohext: 25, hammer: 15,
+  deadlift: 115, frontsquat: 45, lunge: 20, legext: 40, calfseated: 90, legraise: 0,
 };
 const NO_WEIGHT = ["plank", "pullup", "legraise"];
 const BIG_FIVE = ["squat", "bench", "deadlift", "ohp", "row"];
