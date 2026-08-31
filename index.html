@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-title" content="GAINS">
 <meta name="theme-color" content="#F5F4EF">
 <title>GAINS</title>
-<!-- v6.11 -->
+<!-- v7.0 -->
 <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%232743F0'/%3E%3Ctext x='50' y='68' font-size='50' font-weight='900' text-anchor='middle' fill='white' font-family='Helvetica'%3EG%3C/text%3E%3C/svg%3E">
 <style>
   /* ==============================================================
@@ -117,22 +117,52 @@ window.storage = {
 <script type="text/babel">
 const { useState, useEffect, useRef, useMemo } = React;
 
-const SAVE_KEY = "gain-coach-v3";
+const SAVE_KEY = "gain-coach-v4";
+const OLD_KEY = "gain-coach-v3";
 const T = (h, m) => h * 60 + m;
 
-// ================= FALL 2026 CLASS SCHEDULE =================
-// Sun=0 Mon=1 Tue=2 Wed=3 Thu=4 Fri=5 Sat=6
+// ================= GOAL =================
+// You are a novice until your STRENGTH stalls, not until a date passes.
+// Novice CNS adaptation lets you add weight most weeks, and muscle is being
+// built at peak rate, which is what justifies the faster 1 lb/week gain.
+// The moment weekly progression dies you are intermediate: muscle accrual
+// slows, the same surplus starts buying fat, and the rate drops to 0.5.
+// That transition is typically 6-12 months, and it is DETECTED below from
+// liftHistory rather than assumed from the calendar.
+const HEIGHT_CM = 182.9, AGE = 19, ACTIVITY = 1.6;
+const maintenance = (lbs) => Math.round((10 * (lbs / 2.2046) + 6.25 * HEIGHT_CM - 5 * AGE + 5) * ACTIVITY);
+const RATE = { novice: 1, intermediate: 0.5 };
+// ~3,000 cal per lb of mixed tissue
+const surplusFor = (rate) => Math.round((rate * 3000) / 7);
+const calTargetFor = (lbs, rate) => maintenance(lbs) + surplusFor(rate);
+const proteinFor = (lbs) => Math.round(lbs * 1.05);
+// Intermediate strength standards, as multiples of bodyweight
+const STANDARDS = [
+  { id: "squat", name: "Squat", mult: 1.5 },
+  { id: "bench", name: "Bench", mult: 1.25 },
+  { id: "deadlift", name: "Deadlift", mult: 2.0 },
+];
+// No new all-time strength high in 21 days, with enough history to mean it.
+const strengthStalled = (hist) => {
+  if (!hist || hist.length < 6) return false;
+  const cut = Date.now() - 21 * 864e5;
+  const recent = hist.filter((p) => p.t >= cut);
+  const older = hist.filter((p) => p.t < cut);
+  if (!older.length || recent.length < 3) return false;
+  return Math.max(...recent.map((p) => p.total)) <= Math.max(...older.map((p) => p.total));
+};
+const BASE_DAY_CAL = 3150;
+
+// ================= FALL 2026 CLASSES =================
 const SEMESTER = { start: "2026-08-31", end: "2026-12-19" };
 const CLASSES = [
   { code: "RUSS-144", short: "Russian", days: { 1: [T(11, 20), T(12, 35)], 3: [T(11, 20), T(13, 0)], 4: [T(11, 20), T(12, 35)] } },
   { code: "WRT-100", short: "Writing", days: { 1: [T(12, 55), T(14, 10)], 4: [T(12, 55), T(14, 10)] } },
   { code: "JLC-104", short: "Justice", days: { 1: [T(14, 30), T(15, 45)], 4: [T(14, 30), T(15, 45)] } },
   { code: "STAT-202", short: "Stats", days: { 2: [T(14, 30), T(15, 45)], 3: [T(14, 30), T(15, 30)], 5: [T(14, 30), T(15, 45)] } },
-  // Encounter AU only meets on these seven Mondays.
   { code: "CORE-102", short: "Encounter", days: { 1: [T(17, 30), T(18, 45)] },
     onlyDates: ["2026-08-31", "2026-09-21", "2026-10-05", "2026-10-19", "2026-11-02", "2026-11-16", "2026-11-30"] },
 ];
-
 const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const classesOn = (d) => {
   const s = iso(d);
@@ -142,8 +172,6 @@ const classesOn = (d) => {
     .map((c) => ({ code: c.code, short: c.short, start: c.days[dow][0], end: c.days[dow][1] }))
     .sort((a, b) => a.start - b.start);
 };
-
-// Slide an event out of a class it would collide with.
 const clash = (t, dur, c) => t < c.end && t + dur > c.start;
 const after = (pref, dur, busy) => {
   let t = pref, moved = null;
@@ -165,67 +193,108 @@ const before = (pref, dur, busy) => {
 };
 const lastEndBefore = (t, busy) => busy.reduce((a, c) => (c.end <= t ? Math.max(a, c.end) : a), -Infinity);
 
-// ================= LIFTS =================
-const LIFTS = {
-  A: [
-    { id: "squat", name: "Squat", scheme: "3 × 5", inc: 5 },
-    { id: "bench", name: "Bench Press", scheme: "3 × 5", inc: 5 },
-    { id: "row", name: "Barbell Row", scheme: "3 × 8", inc: 5 },
-    { id: "plank", name: "Plank", scheme: "3 × 30 sec", inc: 0 },
-  ],
-  B: [
-    { id: "deadlift", name: "Deadlift", scheme: "3 × 5", inc: 5 },
-    { id: "ohp", name: "Overhead Press", scheme: "3 × 5", inc: 2.5 },
-    { id: "pullup", name: "Pull-ups / Lat Pulldown", scheme: "3 × near-failure", inc: 0 },
-    { id: "curl", name: "Dumbbell Curls", scheme: "3 × 10", inc: 0 },
-  ],
+// ================= TRAINING =================
+// 4-day upper/lower, keyed to the weekday. Every muscle lands in the 10-20
+// sets/week band the hypertrophy meta-analyses converge on; the old 3-day A/B
+// gave ~4.5 sets/week for most of the body and no direct triceps or side delts.
+const WORKOUTS = {
+  1: { name: "Upper A", lifts: [
+    { id: "bench", name: "Bench Press", sets: 4, reps: "6-8", inc: 5 },
+    { id: "row", name: "Barbell Row", sets: 4, reps: "8-10", inc: 5 },
+    { id: "ohp", name: "Overhead Press", sets: 3, reps: "8-10", inc: 2.5 },
+    { id: "pulldown", name: "Lat Pulldown", sets: 3, reps: "10-12", inc: 5 },
+    { id: "latraise", name: "Lateral Raise", sets: 3, reps: "12-15", inc: 2.5 },
+    { id: "pushdown", name: "Tricep Pushdown", sets: 4, reps: "10-12", inc: 2.5 },
+    { id: "curl", name: "Barbell Curl", sets: 4, reps: "10-12", inc: 2.5 },
+  ]},
+  2: { name: "Lower A", lifts: [
+    { id: "squat", name: "Squat", sets: 4, reps: "6-8", inc: 5 },
+    { id: "rdl", name: "Romanian Deadlift", sets: 4, reps: "8-10", inc: 5 },
+    { id: "legpress", name: "Leg Press", sets: 3, reps: "10-12", inc: 10 },
+    { id: "legcurl", name: "Lying Leg Curl", sets: 3, reps: "10-12", inc: 5 },
+    { id: "calf", name: "Standing Calf Raise", sets: 5, reps: "12-15", inc: 5 },
+    { id: "plank", name: "Plank", sets: 3, reps: "45 sec", inc: 0 },
+  ]},
+  4: { name: "Upper B", lifts: [
+    { id: "incline", name: "Incline DB Press", sets: 4, reps: "8-10", inc: 2.5 },
+    { id: "pullup", name: "Pull-ups / Assisted", sets: 4, reps: "8-10", inc: 0 },
+    { id: "dbpress", name: "DB Shoulder Press", sets: 3, reps: "8-10", inc: 2.5 },
+    { id: "csrow", name: "Chest-Supported Row", sets: 3, reps: "10-12", inc: 5 },
+    { id: "fly", name: "Cable Fly", sets: 3, reps: "12-15", inc: 2.5 },
+    { id: "reardelt", name: "Rear Delt Fly", sets: 3, reps: "12-15", inc: 2.5 },
+    { id: "ohext", name: "Overhead Tricep Ext", sets: 4, reps: "10-12", inc: 2.5 },
+    { id: "hammer", name: "Hammer Curl", sets: 4, reps: "10-12", inc: 2.5 },
+  ]},
+  5: { name: "Lower B", lifts: [
+    { id: "deadlift", name: "Deadlift", sets: 3, reps: "5", inc: 5 },
+    { id: "frontsquat", name: "Front Squat", sets: 3, reps: "8-10", inc: 5 },
+    { id: "lunge", name: "Walking Lunge", sets: 3, reps: "10-12", inc: 5 },
+    { id: "legext", name: "Leg Extension", sets: 3, reps: "10-12", inc: 5 },
+    { id: "calfseated", name: "Seated Calf Raise", sets: 5, reps: "12-15", inc: 5 },
+    { id: "legraise", name: "Hanging Leg Raise", sets: 3, reps: "10-15", inc: 0 },
+  ]},
 };
-const DEFAULT_WEIGHTS = { squat: 45, bench: 45, row: 65, deadlift: 95, ohp: 45, pullup: 0, curl: 15 };
-const BARBELL_LIFTS = ["squat", "bench", "row", "deadlift", "ohp"];
-const BODYWEIGHT_LIFTS = ["plank", "pullup"];
+const LIFT_DAYS = [1, 2, 4, 5];
+const DEFAULT_WEIGHTS = {
+  bench: 45, row: 45, ohp: 45, pulldown: 50, latraise: 10, pushdown: 25, curl: 30,
+  squat: 45, rdl: 65, legpress: 90, legcurl: 30, calf: 90, plank: 0,
+  incline: 20, pullup: 0, dbpress: 15, csrow: 30, fly: 15, reardelt: 10, ohext: 20, hammer: 15,
+  deadlift: 95, frontsquat: 45, lunge: 20, legext: 40, calfseated: 45, legraise: 0,
+};
+const NO_WEIGHT = ["plank", "pullup", "legraise"];
+const BIG_FIVE = ["squat", "bench", "deadlift", "ohp", "row"];
+const ALL_LIFTS = Object.values(WORKOUTS).flatMap((w) => w.lifts);
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const todayKey = () => iso(new Date());
 const yesterdayKey = () => iso(new Date(Date.now() - 864e5));
 
-const CALS = { shake1: 1000, snack1: 400, prelift: 100, lift: 0, shake2: 1600, snack2: 450, weighin: 0, water1: 0, water2: 0, water3: 0, water4: 0 };
+// ================= FOOD =================
+// 3,150 cal / 150g protein, seven small feedings. Two land in the 20-minute
+// gaps between classes. Nothing cooked, nothing blended.
+const CALS = { meal1: 530, bar: 410, mix: 320, snack: 275, prelift: 150, dinner: 1155, night: 310,
+  weighin: 0, water1: 0, water2: 0, water3: 0 };
+const PROT = { meal1: 19, bar: 30, mix: 8, snack: 8, prelift: 8, dinner: 48, night: 33 };
 const TOASTS = {
-  shake1: "+1,000 cal banked 🥤", snack1: "+400 cal banked 🥜", prelift: "Fueled up ⛽",
-  shake2: "+1,600 cal banked 🍽️", snack2: "+450 cal banked 🌙", weighin: "Logged. Data = gains 📈",
-  water1: "Hydrated 💧", water2: "Hydrated 💧", water3: "Hydrated 💧", water4: "Hydrated 💧",
+  meal1: "+530 banked 🥣", bar: "+410 · 30g protein 💪", mix: "+320 banked 🥜",
+  snack: "+275 banked 🍌", prelift: "Fueled ⛽", dinner: "+1,120 banked 🍽️",
+  night: "+310 · 33g protein 🌙", weighin: "Logged. Data = gains 📈",
+  water1: "Hydrated 💧", water2: "Hydrated 💧", water3: "Hydrated 💧",
 };
-const CORE_EVENTS = ["shake1", "shake2", "lift"];
+const CORE_EVENTS = ["meal1", "bar", "dinner", "night"];
+// The floor: on a wrecked day, these three alone still count. A bad day that
+// ends in "I already blew it" is what actually breaks a bulk.
+const FLOOR_EVENTS = ["bar", "meal1", "night"];
 
-// ================= FRIDGE =================
 const tgt = (q) => `https://www.target.com/s?searchTerm=${encodeURIComponent(q)}`;
 const PANTRY = [
-  { id: "milk", name: "Whole milk", unit: "cups", pkg: 12, brand: "Good & Gather Whole Milk · 3 quart cartons", price: 4, perDay: 5, lowAt: 1, buy: tgt("whole milk quart") },
-  { id: "oats", name: "Quick oats", unit: "cups", pkg: 15, brand: "Quaker Quick 1-Minute Oats · 42oz", price: 6, perDay: 1.5, buy: tgt("quaker quick 1 minute oats 42oz") },
-  { id: "pb", name: "Peanut butter", unit: "tbsp", pkg: 72, brand: "Jif Creamy · 40oz", price: 8, perDay: 4, buy: tgt("jif creamy peanut butter 40oz") },
-  { id: "bananas", name: "Bananas", unit: "", pkg: 12, brand: "2 bunches, slightly green", price: 3, perDay: 2.4, buy: tgt("bananas") },
-  { id: "whey", name: "Whey protein", unit: "scoops", pkg: 29, brand: "ON Gold Standard · 2lb", price: 40, perDay: 2, buy: tgt("optimum nutrition gold standard whey 2lb") },
-  { id: "honey", name: "Honey", unit: "tbsp", pkg: 24, brand: "Good & Gather Honey · 12oz", price: 5, perDay: 2, buy: tgt("honey 12 oz") },
-  { id: "creatine", name: "Creatine", unit: "tsp", pkg: 80, brand: "Creatine monohydrate · 400g tub", price: 20, perDay: 1, buy: tgt("creatine monohydrate powder") },
-  { id: "snacks", name: "Trail mix / bars", unit: "servings", pkg: 14, brand: "Trail mix 2lb + Clif box", price: 15, perDay: 2, buy: tgt("trail mix") },
+  { id: "bars", name: "MET-Rx BIG 100", unit: "bars", pkg: 7, perDay: 1, price: 34, where: "Campus market · $4.89 ea", buy: tgt("met-rx big 100 protein bar") },
+  { id: "whey", name: "Whey protein", unit: "scoops", pkg: 29, perDay: 1, price: 40, where: "ON Gold Standard 2lb", buy: tgt("optimum nutrition gold standard whey 2lb") },
+  { id: "milk", name: "Whole milk", unit: "cups", pkg: 12, perDay: 3, lowAt: 1, price: 4, where: "Target · 3 quart cartons", buy: tgt("whole milk quart") },
+  { id: "oats", name: "Oatmeal cups", unit: "cups", pkg: 7, perDay: 1, price: 14, where: "Quaker instant", buy: tgt("quaker instant oatmeal cup") },
+  { id: "pb", name: "Peanut butter", unit: "tbsp", pkg: 72, perDay: 4, price: 6, where: "Jif 40oz", buy: tgt("jif creamy peanut butter 40oz") },
+  { id: "mix", name: "Trail mix / peanuts", unit: "oz", pkg: 18, perDay: 3, price: 13, where: "Planters or Second Nature", buy: tgt("planters trail mix") },
+  { id: "bananas", name: "Bananas", unit: "", pkg: 12, perDay: 1, price: 3, where: "2 bunches", buy: tgt("bananas") },
+  { id: "oil", name: "Olive oil", unit: "tbsp", pkg: 34, perDay: 1, price: 9, where: "On dinner — 120 cal a spoon", buy: tgt("extra virgin olive oil") },
+  { id: "creatine", name: "Creatine", unit: "tsp", pkg: 80, perDay: 1, price: 20, where: "Monohydrate · in water", buy: tgt("creatine monohydrate powder") },
 ];
 const FULL_PANTRY = Object.fromEntries(PANTRY.map((i) => [i.id, i.pkg]));
-const GEAR = [{ id: "shaker", name: "32oz shaker bottle", brand: "BlenderBottle Classic · 32oz", price: 9, buy: tgt("blenderbottle classic 32 oz") }];
-
 const CONSUME = {
-  shake1: { milk: 2, oats: 0.75, pb: 2, bananas: 1, whey: 1, honey: 1, creatine: 1 },
-  shake2: { milk: 2, oats: 0.75, pb: 2, bananas: 1, whey: 1, honey: 1 },
-  snack1: { snacks: 1 },
-  snack2: { snacks: 1, milk: 1 },
-  prelift: { bananas: 1 },
+  meal1: { oats: 1, pb: 2, milk: 1, creatine: 1 },
+  bar: { bars: 1 },
+  mix: { mix: 2 },
+  snack: { bananas: 1, mix: 1 },
+  prelift: { milk: 1 },
+  dinner: { milk: 1, oil: 1 },
+  night: { whey: 1, pb: 2 },
 };
 
 const VIDEOS = {
-  squat: { id: "vmNPOjaGrVE" }, bench: { id: "gRVjAtPip0Y" }, deadlift: { id: "wYREQkVtvEc" },
-  ohp: { id: "eNFXEEdfQp4" }, row: { id: "G8l_8chR5BE" }, pullup: { id: "jFmCrA6fo78" },
-  curl: { q: "dumbbell curl proper form" }, plank: { q: "plank proper form" },
+  bench: "gRVjAtPip0Y", squat: "vmNPOjaGrVE", deadlift: "wYREQkVtvEc", ohp: "eNFXEEdfQp4",
+  row: "G8l_8chR5BE", pullup: "jFmCrA6fo78", rdl: "7AaaYkFV1A0", frontsquat: "uYumuL_G_V0",
 };
-const videoSrc = (id) => (VIDEOS[id] && VIDEOS[id].id ? `https://www.youtube.com/embed/${VIDEOS[id].id}` : null);
-const videoLink = (id) => (VIDEOS[id] && VIDEOS[id].q ? `https://www.youtube.com/results?search_query=${encodeURIComponent(VIDEOS[id].q)}` : null);
+const videoSrc = (id) => (VIDEOS[id] ? `https://www.youtube.com/embed/${VIDEOS[id]}` : null);
+const videoSearch = (name) => `https://www.youtube.com/results?search_query=${encodeURIComponent(name + " proper form")}`;
 
 const fmt = (mins) => {
   let h = Math.floor(mins / 60);
@@ -236,13 +305,11 @@ const fmt = (mins) => {
   return `${h}:${m.toString().padStart(2, "0")}${ap}`;
 };
 
-// ================= SCHEDULE =================
-const SHAKE = ["2 cups whole milk", "3/4 cup quick oats", "2 tbsp peanut butter", "1 scoop whey", "1 tbsp honey"];
-
-const buildEvents = (date, letter, offsetMin, liftWeights) => {
+// ================= DAY =================
+const buildEvents = (date, offsetMin, liftWeights) => {
   const dow = date.getDay();
   const busy = classesOn(date);
-  const isLiftDay = [1, 3, 5].includes(dow);
+  const w = WORKOUTS[dow];
   const out = [];
   let last = -Infinity;
   const seq = (pref, dur) => {
@@ -251,54 +318,57 @@ const buildEvents = (date, letter, offsetMin, liftWeights) => {
     return r;
   };
 
-  // The workout anchors the evening, so place it before the events around it.
+  // 85 = 75 min session + travel, so Encounter Mondays push the lift after class
   let liftT = null, liftMoved = null;
-  if (isLiftDay) {
-    const r = after(T(18, 0), 75, busy);
-    liftT = r.t; liftMoved = r.moved;
-  }
+  if (w) { const r = after(T(16, 15), 85, busy); liftT = r.t; liftMoved = r.moved; }
 
   if (dow === 0) {
-    const r = seq(T(10, 55), 5);
-    out.push({ id: "weighin", time: r.t, moved: r.moved, title: "Weigh In", sub: "Before the shake, after the bathroom", steps: ["Step on the scale", "Log it below"] });
+    const r = seq(T(9, 0), 5);
+    out.push({ id: "weighin", time: r.t, moved: r.moved, title: "Weigh In", sub: "Same conditions every week", steps: ["Step on the scale", "Log it below"] });
   }
   {
-    const r = seq(T(11, 0), 10);
-    out.push({ id: "shake1", time: r.t, moved: r.moved, title: "Shake #1", sub: "Creatine goes in THIS one",
-      steps: [...SHAKE.map((x, i) => (i === 0 ? "Fill bottle: " + x : "Add " + x)), "Add 1 tsp (5g) creatine", "Shake 30 sec, drink it all", "Eat 1 banana with it"] });
+    const r = seq(T(9, 15), 15);
+    out.push({ id: "meal1", time: r.t, moved: r.moved, title: "Breakfast", sub: "530 cal · 19g",
+      steps: ["Oatmeal cup, hot water", "Stir in 2 tbsp peanut butter", "1 cup whole milk", "5g creatine in water"] });
   }
-  { const r = seq(T(11, 30), 2); out.push({ id: "water1", time: r.t, moved: r.moved, title: "Water — 16oz", sub: "", steps: ["Drink 16oz"] }); }
+  { const r = seq(T(10, 15), 2); out.push({ id: "water1", time: r.t, moved: r.moved, title: "Water — 16oz", sub: "", steps: ["Drink 16oz"] }); }
   {
-    const r = seq(T(13, 0), 10);
-    out.push({ id: "snack1", time: r.t, moved: r.moved, title: "Snack", sub: "Pocket food",
-      steps: ["1 Clif bar + handful of trail mix", "or 2 tbsp PB on 6 crackers", "or handful of peanuts + granola bar"] });
+    const r = seq(T(10, 45), 5);
+    out.push({ id: "bar", time: r.t, moved: r.moved, title: "Protein Bar", sub: "410 cal · 30g",
+      steps: ["MET-Rx BIG 100", "Eat it walking to class"] });
   }
-  { const r = seq(T(14, 0), 2); out.push({ id: "water2", time: r.t, moved: r.moved, title: "Water — 16oz", sub: "", steps: ["Drink 16oz"] }); }
-
-  if (isLiftDay) {
-    const w3 = before(liftT - 30, 2, busy);
-    out.push({ id: "water3", time: w3.t, moved: w3.moved, title: "Water — 16oz + fill bottle", sub: "", steps: ["Drink 16oz", "Fill your bottle for the gym"] });
+  {
+    const r = seq(T(12, 40), 5);
+    out.push({ id: "mix", time: r.t, moved: r.moved, title: "Trail Mix", sub: "320 cal · 8g", steps: ["2 oz trail mix or peanuts"] });
+  }
+  {
+    const r = seq(T(14, 15), 5);
+    out.push({ id: "snack", time: r.t, moved: r.moved, title: "Banana + Peanuts", sub: "275 cal · 8g", steps: ["1 banana", "1 oz peanuts"] });
+  }
+  if (w) {
     const pre = Math.max(liftT - offsetMin, lastEndBefore(liftT, busy));
-    out.push({ id: "prelift", time: pre, moved: null, title: "Head to Gym", sub: "", steps: ["1 banana or granola bar if low", "Fill water bottle", "Go"] });
-    out.push({ id: "lift", time: liftT, moved: liftMoved, title: `Workout ${letter}`, sub: "rest 2-3 min between sets",
-      steps: LIFTS[letter].map((l) => (BODYWEIGHT_LIFTS.includes(l.id) ? `${l.name} — ${l.scheme}` : `${l.name} — ${l.scheme} @ ${liftWeights[l.id]} lbs`)) });
-    last = liftT + 75;
+    out.push({ id: "prelift", time: pre, moved: null, title: "Head to Gym", sub: "150 cal · 8g", steps: ["1 cup whole milk", "Fill your bottle", "Go"] });
+    out.push({ id: "lift", time: liftT, moved: liftMoved, title: w.name, sub: "Last rep hard · 1-2 in reserve",
+      steps: w.lifts.map((l) => `${l.name} — ${l.sets}×${l.reps}${NO_WEIGHT.includes(l.id) ? "" : ` @ ${liftWeights[l.id]} lbs`}`) });
+    last = liftT + 85;
+  } else {
+    const r = seq(T(16, 15), 5);
+    out.push({ id: "prelift", time: r.t, moved: r.moved, title: "Afternoon Milk", sub: "150 cal · 8g", steps: ["1 cup whole milk"] });
   }
-  const s2 = seq(T(19, 0), 15);
-  out.push({ id: "shake2", time: s2.t, moved: s2.moved, title: "Shake #2 + Dinner", sub: "No creatine in this one",
-    steps: [...SHAKE.map((x, i) => (i === 0 ? "Fill bottle: " + x : "Add " + x)), "Shake 30 sec", "Eat 1 banana with it", "Eat your normal dinner too", "Add one upgrade: extra rice, olive oil, or cheese"] });
-  // the last two hang off the dinner shake, not the clock, so a late gym night
-  // doesn't stack a bedtime snack 15 minutes after a 1,600-calorie meal
-  const n2 = seq(Math.max(T(20, 30), s2.t + 75), 5);
-  out.push({ id: "snack2", time: n2.t, moved: n2.moved, title: "Bedtime Snack", sub: "", steps: ["Handful of trail mix or peanuts", "or a spoon of PB", "+ 1 glass whole milk"] });
-  const w4 = seq(Math.max(T(21, 15), n2.t + 30), 2);
-  out.push({ id: "water4", time: w4.t, moved: w4.moved, title: "Water — 8–12oz", sub: "", steps: ["Drink 8–12oz"] });
-
+  { const r = seq(T(19, 0), 30); out.push({ id: "dinner", time: r.t, moved: r.moved, title: "Dinner", sub: "1,155 cal · 48g",
+    steps: ["Whatever you're eating — go big", "1 tbsp olive oil over it", "1 cup whole milk"] }); }
+  { const r = seq(T(20, 0), 2); out.push({ id: "water2", time: r.t, moved: r.moved, title: "Water — 16oz", sub: "", steps: ["Drink 16oz"] }); }
+  {
+    const r = seq(T(21, 0), 10);
+    out.push({ id: "night", time: r.t, moved: r.moved, title: "Last Feed", sub: "310 cal · 33g",
+      steps: ["1 scoop whey in water", "2 tbsp peanut butter"] });
+  }
+  { const r = seq(T(21, 45), 2); out.push({ id: "water3", time: r.t, moved: r.moved, title: "Water — 8oz", sub: "Taper so you sleep", steps: ["Drink 8oz"] }); }
   return out.sort((a, b) => a.time - b.time);
 };
 
 // ================= THEME =================
-const C = { ink: "#0E0E10", paper: "#F5F4EF", blue: "#2743F0", gray: "#6E6E72", line: "#E4E2DA", warn: "#C6470E" };
+const C = { ink: "#0E0E10", paper: "#F5F4EF", blue: "#2743F0", gray: "#6E6E72", line: "#E4E2DA", warn: "#C6470E", ok: "#1B7F4B" };
 const S = {
   h1: { fontSize: 34, fontWeight: 900, letterSpacing: "-0.03em", textTransform: "uppercase", margin: "0 0 2px" },
   header: { padding: "22px 18px 6px" },
@@ -310,10 +380,7 @@ const S = {
   banner: (col, bg) => ({ margin: "10px 14px", padding: "12px 16px", borderRadius: 12, border: `2px solid ${col}`, background: bg, fontSize: 14, fontWeight: 700, color: col }),
 };
 
-// ================= COMPONENTS (module scope) =================
-// These MUST stay outside GainCoach. Defined inside, every render creates a
-// new component identity, React remounts the subtree, and the weigh-in input
-// loses focus — the iOS keyboard closed after each keystroke.
+// ================= COMPONENTS (module scope — see note in v6.1) =================
 class ErrorBoundary extends React.Component {
   constructor(p) { super(p); this.state = { err: null }; }
   static getDerivedStateFromError(err) { return { err }; }
@@ -329,7 +396,7 @@ class ErrorBoundary extends React.Component {
   }
 }
 
-const Chart = ({ pts, sPts }) => {
+const Chart = ({ pts, sPts, startWeight, startT, rateNow }) => {
   if (pts.length < 2 && sPts.length < 2)
     return <p style={{ fontSize: 13, color: C.gray, margin: 0 }}>Log 2 weigh-ins (or finish 2 workouts) to see the graph.</p>;
   const W = 340, H = 150, P = 14, LBL = 26;
@@ -345,19 +412,28 @@ const Chart = ({ pts, sPts }) => {
     return { lo, hi, Y, poly: arr.map((p) => `${X(p.t)},${Y(p[key])}`).join(" "), dots: arr.map((p) => [X(p.t), Y(p[key])]) };
   };
   const w = mk(pts, "lbs"), s = mk(sPts, "total"), ax = w || s;
+  // dashed line = where 1 lb/week says you should be
+  let pace = null;
+  if (w && startWeight != null && startT != null) {
+    const wk = (t) => (t - startT) / (7 * 864e5);
+    const a = startWeight + wk(t0) * rateNow, b = startWeight + wk(t1) * rateNow;
+    pace = `${X(t0)},${w.Y(a)} ${X(t1)},${w.Y(b)}`;
+  }
   return (
     <>
       <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", display: "block" }}>
         {ax && <text x="2" y={ax.Y(ax.hi) + 4} fontSize="10" fontWeight="700" fill={C.gray}>{Math.round(ax.hi)}</text>}
         {ax && <text x="2" y={ax.Y(ax.lo) + 4} fontSize="10" fontWeight="700" fill={C.gray}>{Math.round(ax.lo)}</text>}
+        {pace && <polyline points={pace} fill="none" stroke={C.ok} strokeWidth="2" strokeDasharray="5 4" />}
         {s && <polyline points={s.poly} fill="none" stroke={C.warn} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />}
         {s && s.dots.map(([x, y], i) => <circle key={"s" + i} cx={x} cy={y} r="4" fill={C.warn} />)}
         {w && <polyline points={w.poly} fill="none" stroke={C.blue} strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" />}
         {w && w.dots.map(([x, y], i) => <circle key={"w" + i} cx={x} cy={y} r="4.5" fill={C.blue} />)}
       </svg>
-      <div style={{ display: "flex", gap: 16, marginTop: 8, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", gap: 14, marginTop: 8, flexWrap: "wrap" }}>
         <span style={{ fontSize: 12, fontWeight: 700, color: C.blue }}>● Bodyweight</span>
         <span style={{ fontSize: 12, fontWeight: 700, color: C.warn }}>● Strength</span>
+        {pace && <span style={{ fontSize: 12, fontWeight: 700, color: C.ok }}>┄ On pace</span>}
       </div>
     </>
   );
@@ -368,8 +444,6 @@ const EventCard = ({ e, mark, past, active, weightInput, setWeightInput, onLogWe
   const base = { margin: "10px 14px", borderRadius: 14, border: `2px solid ${C.ink}`, background: "#fff", transition: "all 0.4s ease", overflow: "hidden" };
   if (mark) {
     const skipped = mark === "skip";
-    // The lift is deliberately not un-checkable by tapping: undoing it would
-    // have to roll back the weight progression and the workout counter.
     const undoable = e.id !== "lift";
     return (
       <div style={{ ...base, opacity: 0.35, transform: "scale(0.94)", padding: "10px 14px", display: "flex", alignItems: "center", gap: 10, cursor: undoable ? "pointer" : "default" }}
@@ -397,8 +471,8 @@ const EventCard = ({ e, mark, past, active, weightInput, setWeightInput, onLogWe
       )}
       {e.id === "lift" && (
         <div style={{ marginTop: 14 }}>
-          <button style={{ ...S.btn, width: "100%" }} onClick={() => onComplete(true)}>Hit all reps ✓</button>
-          <button style={{ ...S.btn, width: "100%", marginTop: 8, background: "#fff", color: C.ink }} onClick={() => onComplete(false)}>Missed some reps</button>
+          <button style={{ ...S.btn, width: "100%" }} onClick={() => onComplete(true)}>Hit top of every range ✓</button>
+          <button style={{ ...S.btn, width: "100%", marginTop: 8, background: "#fff", color: C.ink }} onClick={() => onComplete(false)}>Fell short</button>
         </div>
       )}
       {e.id !== "weighin" && e.id !== "lift" && <button style={{ ...S.btn, width: "100%", marginTop: 14 }} onClick={onToggle}>Done ✓</button>}
@@ -412,9 +486,9 @@ function GainCoach() {
   const [tab, setTab] = useState("home");
   const [clock, setClock] = useState(() => new Date());
   const [state, setState] = useState({
-    checks: {}, checksDate: todayKey(), nextWorkout: "A", startWeight: null, weights: [],
-    offsetMin: 10, notifOn: false, liftWeights: { ...DEFAULT_WEIGHTS }, streak: 0, lastFullDay: null,
-    startDate: null, startLifts: null, totals: { cal: 0, shakes: 0, workouts: 0 },
+    checks: {}, checksDate: todayKey(), startWeight: null, weights: [], offsetMin: 25,
+    notifOn: false, liftWeights: { ...DEFAULT_WEIGHTS }, streak: 0, lastFullDay: null,
+    startDate: null, startLifts: null, totals: { cal: 0, protein: 0, workouts: 0 },
     pantry: { ...FULL_PANTRY }, liftHistory: [],
   });
   const [toast, setToast] = useState(null);
@@ -422,7 +496,7 @@ function GainCoach() {
   const [weightInput, setWeightInput] = useState("");
   const [startInput, setStartInput] = useState("");
   const [range, setRange] = useState("ALL");
-  const [liftTab, setLiftTab] = useState("A");
+  const [liftTab, setLiftTab] = useState(1);
   const [openLift, setOpenLift] = useState(null);
   const notified = useRef({});
   const toastTimer = useRef(null);
@@ -430,15 +504,16 @@ function GainCoach() {
 
   const nowMin = clock.getHours() * 60 + clock.getMinutes();
   const day = clock.getDay();
-  const isLiftDay = [1, 3, 5].includes(day);
+  const todayWorkout = WORKOUTS[day];
   const todayClasses = useMemo(() => classesOn(clock), [clock.toDateString()]);
 
   useEffect(() => {
     (async () => {
       try {
-        const r = await window.storage.get(SAVE_KEY);
-        if (r && r.value) {
-          const s = JSON.parse(r.value);
+        let raw = null;
+        try { raw = (await window.storage.get(SAVE_KEY)).value; } catch (e) {}
+        if (raw) {
+          const s = JSON.parse(raw);
           if (s.checksDate !== todayKey()) {
             s.checks = {}; s.checksDate = todayKey();
             if (s.lastFullDay !== yesterdayKey() && s.lastFullDay !== todayKey()) s.streak = 0;
@@ -446,14 +521,22 @@ function GainCoach() {
           setState((p) => ({ ...p, ...s,
             liftWeights: { ...DEFAULT_WEIGHTS, ...(s.liftWeights || {}) },
             pantry: { ...FULL_PANTRY, ...(s.pantry || {}) },
-            totals: { cal: 0, shakes: 0, workouts: 0, ...(s.totals || {}) } }));
+            totals: { cal: 0, protein: 0, workouts: 0, ...(s.totals || {}) } }));
+        } else {
+          // carry the only things worth keeping from the pre-v4 plan
+          try {
+            const old = JSON.parse((await window.storage.get(OLD_KEY)).value);
+            setState((p) => ({ ...p,
+              weights: old.weights || [], startWeight: old.startWeight ?? null,
+              startDate: old.startDate || null,
+              totals: { cal: 0, protein: 0, workouts: old.totals?.workouts || 0 } }));
+          } catch (e) {}
         }
       } catch (e) {}
       setLoaded(true);
     })();
   }, []);
 
-  // Persistence follows state, so back-to-back updates can't overwrite each other.
   useEffect(() => {
     if (!loaded) return;
     window.storage.set(SAVE_KEY, JSON.stringify(state)).catch((e) => console.error(e));
@@ -472,10 +555,8 @@ function GainCoach() {
   useEffect(() => () => clearTimeout(toastTimer.current), []);
   useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = 0; }, [tab]);
 
-  const events = useMemo(
-    () => buildEvents(clock, state.nextWorkout, state.offsetMin, state.liftWeights),
-    [clock.toDateString(), state.nextWorkout, state.offsetMin, state.liftWeights]
-  );
+  const events = useMemo(() => buildEvents(clock, state.offsetMin, state.liftWeights),
+    [clock.toDateString(), state.offsetMin, state.liftWeights]);
 
   useEffect(() => {
     if (!state.notifOn || typeof Notification === "undefined" || Notification.permission !== "granted") return;
@@ -495,10 +576,11 @@ function GainCoach() {
   };
 
   const isResolved = (checks, id) => checks[id] === true || checks[id] === "skip";
+  // The streak runs off the FLOOR, not a perfect day. A streak you can only
+  // keep by being perfect is a streak you abandon the first time you slip.
   const applyStreak = (next) => {
-    const all = events.every((e) => isResolved(next.checks, e.id));
-    const core = events.filter((e) => CORE_EVENTS.includes(e.id)).every((e) => next.checks[e.id] === true);
-    return all && core && next.lastFullDay !== todayKey()
+    const floor = FLOOR_EVENTS.every((id) => next.checks[id] === true);
+    return floor && next.lastFullDay !== todayKey()
       ? { ...next, streak: (next.streak || 0) + 1, lastFullDay: todayKey() }
       : next;
   };
@@ -510,10 +592,9 @@ function GainCoach() {
       const dir = was ? -1 : 1;
       const totals = { ...prev.totals };
       totals.cal = Math.max(0, (totals.cal || 0) + dir * (CALS[id] || 0));
-      if (id === "shake1" || id === "shake2") totals.shakes = Math.max(0, (totals.shakes || 0) + dir);
+      totals.protein = Math.max(0, (totals.protein || 0) + dir * (PROT[id] || 0));
       const pantry = { ...prev.pantry };
       Object.entries(CONSUME[id] || {}).forEach(([k, v]) => {
-        // clamped at both ends so undo can never inflate stock past a full package
         pantry[k] = Math.min(FULL_PANTRY[k], Math.max(0, (pantry[k] ?? FULL_PANTRY[k]) - dir * v));
       });
       return applyStreak({ ...prev, checks: { ...prev.checks, [id]: !was }, checksDate: todayKey(), totals, pantry });
@@ -521,21 +602,20 @@ function GainCoach() {
   };
 
   const completeLift = (success) => {
-    if (state.checks.lift === true) return;
-    showToast(success ? "All reps hit — bar goes up next time 🏋️" : "Logged. Same weight next time 💪");
+    if (state.checks.lift === true || !todayWorkout) return;
+    showToast(success ? "Logged — weight goes up next time 🏋️" : "Logged. Same weight next time 💪");
     setState((prev) => {
       if (prev.checks.lift === true) return prev;
-      const justDid = prev.nextWorkout;
       let liftWeights = prev.liftWeights;
       if (success) {
         liftWeights = { ...prev.liftWeights };
-        LIFTS[justDid].forEach((l) => { if (l.inc > 0) liftWeights[l.id] = (liftWeights[l.id] || 0) + l.inc; });
+        todayWorkout.lifts.forEach((l) => { if (l.inc > 0) liftWeights[l.id] = (liftWeights[l.id] || 0) + l.inc; });
       }
-      const total = BARBELL_LIFTS.reduce((a, k) => a + (liftWeights[k] || 0), 0);
+      const total = BIG_FIVE.reduce((a, k) => a + (liftWeights[k] || 0), 0);
       return applyStreak({ ...prev,
         checks: { ...prev.checks, lift: true }, checksDate: todayKey(),
         totals: { ...prev.totals, workouts: (prev.totals.workouts || 0) + 1 },
-        liftWeights, nextWorkout: justDid === "A" ? "B" : "A",
+        liftWeights,
         liftHistory: [...(prev.liftHistory || []), { t: Date.now(), total }] });
     });
   };
@@ -568,58 +648,53 @@ function GainCoach() {
     setState((p) => ({ ...p, liftWeights: { ...p.liftWeights, [id]: v } }));
   };
   const restock = (item) => {
-    setState((p) => ({ ...p, pantry: { ...p.pantry, [item.id]: Math.min(item.pkg, (p.pantry[item.id] || 0) + item.pkg) } }));
+    setState((p) => ({ ...p, pantry: { ...p.pantry, [item.id]: item.pkg } }));
     showToast(`${item.name} restocked 🛒`);
   };
   const startPlan = () => setState((p) => ({ ...p, startDate: new Date().toISOString().slice(0, 10), startLifts: { ...p.liftWeights } }));
-  // A real toggle. The old version called requestPermission() on every tap,
-  // which resolves straight to "granted" once permission exists, so notifOn
-  // could only ever be set back to true — there was no way to turn it off.
-  // notifOn is our own switch and it gates the notification effect, so
-  // flipping it off stops alerts even though browser permission is sticky.
   const toggleNotifs = async () => {
-    if (state.notifOn) {
-      setState((s) => ({ ...s, notifOn: false }));
-      showToast("Notifications off");
-      return;
-    }
+    if (state.notifOn) { setState((s) => ({ ...s, notifOn: false })); showToast("Notifications off"); return; }
     if (typeof Notification === "undefined") { alert("Notifications aren't supported here."); return; }
     let perm = Notification.permission;
     if (perm === "default") perm = await Notification.requestPermission();
-    if (perm !== "granted") {
-      alert("Notifications are blocked for GAINS. Turn them back on in iPhone Settings \u2192 Notifications \u2192 GAINS.");
-      return;
-    }
+    if (perm !== "granted") { alert("Notifications are blocked for GAINS. Turn them back on in iPhone Settings → Notifications → GAINS."); return; }
     setState((s) => ({ ...s, notifOn: true }));
-    showToast("Notifications on \ud83d\udd14");
+    showToast("Notifications on 🔔");
   };
 
   // ---- derived ----
-  const rangeMs = { "1W": 7 * 864e5, "1M": 30 * 864e5, "3M": 90 * 864e5, ALL: Infinity }[range];
+  const rangeMs = { "1M": 30 * 864e5, "3M": 90 * 864e5, ALL: Infinity }[range];
   const cutoff = Date.now() - rangeMs;
   const pts = state.weights.filter((p) => p.t >= cutoff);
   const sPts = (state.liftHistory || []).filter((p) => p.t >= cutoff);
   const latest = state.weights.length ? state.weights[state.weights.length - 1].lbs : null;
   const delta = latest != null && state.startWeight != null ? (latest - state.startWeight).toFixed(1) : null;
-  const daysIn = state.weights.length ? Math.max(1, Math.round((Date.now() - state.weights[0].t) / 864e5)) : 0;
+  const startT = state.weights.length ? state.weights[0].t : null;
   const dayN = state.startDate ? Math.floor((Date.now() - new Date(state.startDate).getTime()) / 864e5) + 1 : null;
   const weekN = dayN ? Math.floor((dayN - 1) / 7) + 1 : null;
+
   const calsToday = events.reduce((a, e) => a + (state.checks[e.id] === true ? CALS[e.id] || 0 : 0), 0);
+  const protToday = events.reduce((a, e) => a + (state.checks[e.id] === true ? PROT[e.id] || 0 : 0), 0);
   const doneCount = events.filter((e) => state.checks[e.id] === true).length;
   const resolvedCount = events.filter((e) => isResolved(state.checks, e.id)).length;
   const firstLive = events.find((x) => nowMin >= x.time && !state.checks[x.id]);
+  const floorDone = FLOOR_EVENTS.filter((id) => state.checks[id] === true).length;
 
-  const gain = latest != null && state.startWeight != null ? latest - state.startWeight : 0;
-  let milestone = null;
-  if (dayN && [7, 14, 30, 60, 90].includes(dayN)) milestone = `🔥 Day ${dayN}. Most people quit by now. Not you.`;
-  if (!milestone && gain >= 5) milestone = `💪 +${Math.floor(gain / 5) * 5} lbs gained since Day 1`;
+  // phase is detected from strength progression, never from the calendar
+  const stalled = strengthStalled(state.liftHistory);
+  const phase = stalled ? "intermediate" : "novice";
+  const rateNow = RATE[phase];
+  const bw = latest ?? state.startWeight ?? 140;
+  const calTarget = calTargetFor(bw, rateNow);
+  const proteinTarget = proteinFor(bw);
+  const calGap = calTarget - BASE_DAY_CAL;
 
-  // rate-based, so a normal +0.75 lb/week never trips it
-  const recent = state.weights.filter((p) => p.t >= Date.now() - 14 * 864e5);
-  let coachFlat = false;
-  if (state.weights.length >= 3 && recent.length >= 2) {
-    const spanDays = (recent[recent.length - 1].t - recent[0].t) / 864e5;
-    if (spanDays >= 10) coachFlat = ((recent[recent.length - 1].lbs - recent[0].lbs) / spanDays) * 7 < 0.4;
+  // pace: where the current rate says you should be by now
+  let pace = null;
+  if (state.startWeight != null && startT != null && latest != null && state.weights.length >= 2) {
+    const wks = (Date.now() - startT) / (7 * 864e5);
+    const should = state.startWeight + wks * rateNow;
+    pace = { should, diff: latest - should, wks };
   }
 
   const lowItems = PANTRY.filter((i) => (state.pantry?.[i.id] ?? i.pkg) / i.perDay <= (i.lowAt ?? 3));
@@ -639,18 +714,21 @@ function GainCoach() {
             <div style={S.header}>
               {dayN && <div style={{ fontSize: 15, fontWeight: 900, letterSpacing: "0.1em", color: C.blue, textTransform: "uppercase", marginBottom: 2 }}>Day {dayN} · Week {weekN}</div>}
               <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.14em", color: C.gray, textTransform: "uppercase" }}>
-                {DAYS[day]} · {fmt(nowMin)} · {doneCount}/{events.length} done{state.streak > 0 ? ` · 🔥 ${state.streak}` : ""}
+                {DAYS[day]} · {fmt(nowMin)}{state.streak > 0 ? ` · 🔥 ${state.streak}` : ""}
               </div>
-              <h1 style={S.h1}>{isLiftDay ? `Lift Day ${state.nextWorkout}` : "Rest & Eat"}</h1>
+              <h1 style={S.h1}>{todayWorkout ? todayWorkout.name : "Rest & Eat"}</h1>
               {todayClasses.length > 0 && (
                 <div style={{ fontSize: 12, fontWeight: 700, color: C.gray, marginTop: 4 }}>
                   {todayClasses.map((c) => `${c.code} ${fmt(c.start)}`).join(" · ")}
                 </div>
               )}
               <div style={{ height: 8, borderRadius: 4, background: C.line, marginTop: 10, overflow: "hidden" }}>
-                <div style={{ height: "100%", width: `${(doneCount / events.length) * 100}%`, background: C.blue, transition: "width 0.5s ease" }} />
+                <div style={{ height: "100%", width: `${Math.min(100, (calsToday / calTarget) * 100)}%`, background: C.blue, transition: "width 0.5s ease" }} />
               </div>
-              {calsToday > 0 && <div style={{ fontSize: 13, fontWeight: 800, marginTop: 6 }}>⚡ {calsToday.toLocaleString()} cal banked today</div>}
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, fontWeight: 800, marginTop: 6 }}>
+                <span>{calsToday.toLocaleString()} / {calTarget.toLocaleString()} cal</span>
+                <span style={{ color: protToday >= proteinTarget ? C.ok : C.gray }}>{protToday} / {proteinTarget}g protein</span>
+              </div>
             </div>
 
             {!state.startDate && (
@@ -659,13 +737,40 @@ function GainCoach() {
                 <button style={{ ...S.btn, width: "100%", fontSize: 17 }} onClick={startPlan}>🚀 Start Day 1</button>
               </div>
             )}
-            {coachFlat && <div style={S.banner(C.warn, "#FDF1EA")}>Scale's flat 2 weeks — add 1 tbsp olive oil + a 2nd banana to each shake.</div>}
+
+            {floorDone < 3 && (
+              <div style={S.banner(floorDone === 3 ? C.ok : C.gray, "#fff")}>
+                Floor {floorDone}/3 — bar, breakfast, last feed. Hit these and today counts, whatever else happens.
+              </div>
+            )}
+            {floorDone === 3 && <div style={S.banner(C.ok, "#EAF5EE")}>✓ Floor hit. Today counts.</div>}
+
+            {stalled && (
+              <div style={S.banner(C.warn, "#FDF1EA")}>
+                No new strength PR in 3 weeks — you've likely left the novice phase.
+                Rate dropped to 0.5 lb/week ({calTarget.toLocaleString()} cal). Same surplus would just be fat now.
+              </div>
+            )}
+
+            {calGap > 120 && (
+              <div style={S.banner(C.blue, "#EEF1FE")}>
+                You're {bw} lb now — target is {calTarget.toLocaleString()} cal. Add {Math.round(calGap / 100) * 100} on top of the day below (1 PB spoon ≈ 95, 1 cup milk ≈ 150).
+              </div>
+            )}
+
+            {pace && Math.abs(pace.diff) > 1.5 && (
+              <div style={S.banner(pace.diff < 0 ? C.warn : C.blue, pace.diff < 0 ? "#FDF1EA" : "#EEF1FE")}>
+                {pace.diff < 0
+                  ? `${Math.abs(pace.diff).toFixed(1)} lb behind pace — add 300 cal/day (1 more PB spoon + a cup of milk)`
+                  : `${pace.diff.toFixed(1)} lb ahead of pace — ease off 200 cal if it keeps climbing`}
+              </div>
+            )}
+
             {lowItems.length > 0 && (
               <div style={{ ...S.banner(C.warn, "#FDF1EA"), cursor: "pointer" }} onClick={() => setTab("fridge")}>
                 🛒 Running low: {lowItems.map((i) => i.name).join(", ")}
               </div>
             )}
-            {milestone && <div style={{ ...S.banner(C.blue, "#EEF1FE"), fontSize: 15, fontWeight: 800, textAlign: "center" }}>{milestone}</div>}
 
             {events.map((e) => (
               <EventCard key={e.id} e={e} mark={state.checks[e.id]} past={nowMin >= e.time}
@@ -689,33 +794,36 @@ function GainCoach() {
         {tab === "lifts" && (
           <>
             <div style={S.header}><h1 style={S.h1}>Lifts</h1></div>
-            <div style={{ display: "flex", gap: 8, margin: "0 14px 4px" }}>
-              {["A", "B"].map((w) => (
-                <button key={w} onClick={() => { setLiftTab(w); setOpenLift(null); }}
-                  style={{ flex: 1, padding: 12, fontWeight: 900, fontSize: 15, borderRadius: 10, border: `2px solid ${C.ink}`, background: liftTab === w ? C.blue : "#fff", color: liftTab === w ? "#fff" : C.ink, cursor: "pointer" }}>Workout {w}</button>
+            <div style={{ display: "flex", gap: 6, margin: "0 14px 4px" }}>
+              {LIFT_DAYS.map((d) => (
+                <button key={d} onClick={() => { setLiftTab(d); setOpenLift(null); }}
+                  style={{ flex: 1, padding: "10px 2px", fontWeight: 900, fontSize: 12, borderRadius: 10, border: `2px solid ${C.ink}`, background: liftTab === d ? C.blue : "#fff", color: liftTab === d ? "#fff" : C.ink, cursor: "pointer" }}>
+                  {WORKOUTS[d].name}
+                </button>
               ))}
             </div>
-            {LIFTS[liftTab].map((l) => {
+            <div style={{ margin: "8px 14px 0", fontSize: 12, fontWeight: 700, color: C.gray }}>{DAYS[liftTab]} · {WORKOUTS[liftTab].lifts.length} exercises</div>
+            {WORKOUTS[liftTab].lifts.map((l) => {
               const open = openLift === l.id;
-              const showW = !BODYWEIGHT_LIFTS.includes(l.id);
+              const src = videoSrc(l.id);
               return (
                 <div key={l.id} style={{ ...S.card, padding: 0, overflow: "hidden" }}>
                   <div onClick={() => setOpenLift(open ? null : l.id)} style={{ padding: 16, display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}>
                     <div>
                       <div style={{ fontWeight: 800, fontSize: 16 }}>{l.name}</div>
-                      <div style={{ fontSize: 13, color: C.gray, fontWeight: 600 }}>{l.scheme}{showW ? ` @ ${state.liftWeights[l.id]} lbs` : ""}</div>
+                      <div style={{ fontSize: 13, color: C.gray, fontWeight: 600 }}>{l.sets}×{l.reps}{NO_WEIGHT.includes(l.id) ? "" : ` @ ${state.liftWeights[l.id]} lbs`}</div>
                     </div>
                     <span style={{ fontWeight: 900, fontSize: 18, color: C.blue }}>{open ? "▲" : "▶"}</span>
                   </div>
-                  {open && videoSrc(l.id) && (
+                  {open && src && (
                     <div style={{ borderTop: `2px solid ${C.ink}` }}>
-                      <iframe src={videoSrc(l.id)} style={{ width: "100%", aspectRatio: "16/9", border: "none", display: "block" }}
+                      <iframe src={src} style={{ width: "100%", aspectRatio: "16/9", border: "none", display: "block" }}
                         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen title={l.name} />
                     </div>
                   )}
-                  {open && !videoSrc(l.id) && (
+                  {open && !src && (
                     <div style={{ borderTop: `2px solid ${C.ink}`, padding: 14 }}>
-                      <a href={videoLink(l.id)} target="_blank" rel="noopener" style={{ ...S.btn, display: "block", textAlign: "center", textDecoration: "none" }}>▶️ Form video</a>
+                      <a href={videoSearch(l.name)} target="_blank" rel="noopener" style={{ ...S.btn, display: "block", textAlign: "center", textDecoration: "none" }}>▶️ Form video</a>
                     </div>
                   )}
                 </div>
@@ -743,7 +851,7 @@ function GainCoach() {
                     <div style={{ height: "100%", width: `${Math.min(1, left / item.pkg) * 100}%`, background: low ? C.warn : C.blue, transition: "width 0.4s" }} />
                   </div>
                   <div style={{ fontSize: 13, color: C.gray, marginBottom: 4 }}>~{Math.round(left * 10) / 10} {item.unit} left</div>
-                  <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>{item.brand} · ~${item.price}</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>{item.where} · ~${item.price}</div>
                   <div style={{ display: "flex", gap: 8 }}>
                     <button style={{ ...S.btn, flex: 1, padding: 10 }} onClick={() => restock(item)}>Bought ✓</button>
                     <a href={item.buy} target="_blank" rel="noopener" style={{ ...S.btn, flex: 1, padding: 10, background: "#fff", color: C.ink, textAlign: "center", textDecoration: "none" }}>🎯 Target</a>
@@ -751,21 +859,12 @@ function GainCoach() {
                 </div>
               );
             })}
-
-            {GEAR.map((g) => (
-              <div key={g.id} style={S.card}>
-                <div style={{ fontWeight: 800, fontSize: 16 }}>{g.name}</div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: C.gray, margin: "4px 0 10px" }}>{g.brand} · ~${g.price} · one-time</div>
-                <a href={g.buy} target="_blank" rel="noopener" style={{ ...S.btn, display: "block", padding: 10, background: "#fff", color: C.ink, textAlign: "center", textDecoration: "none" }}>🎯 Target</a>
-              </div>
-            ))}
-
             <div style={S.card}>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 15, fontWeight: 700, marginBottom: 6 }}>
-                <span>Restock low items</span><span style={{ color: C.warn }}>~${lowItems.reduce((a, i) => a + i.price, 0)}</span>
+                <span>Restock low</span><span style={{ color: C.warn }}>~${lowItems.reduce((a, i) => a + i.price, 0)}</span>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 15, fontWeight: 700 }}>
-                <span>Everything</span><span style={{ color: C.blue }}>~${PANTRY.reduce((a, i) => a + i.price, 0)}</span>
+                <span>Full week</span><span style={{ color: C.blue }}>~${PANTRY.reduce((a, i) => a + i.price, 0)}</span>
               </div>
             </div>
           </>
@@ -785,7 +884,7 @@ function GainCoach() {
                 </>
               ) : (
                 <div style={{ display: "flex", justifyContent: "space-between", textAlign: "center" }}>
-                  {[["Start", state.startWeight], ["Now", latest ?? "—"], ["Gained", delta != null ? (delta > 0 ? "+" : "") + delta : "—"], ["Days", daysIn]].map(([k, v], i) => (
+                  {[["Start", state.startWeight], ["Now", latest ?? "—"], ["Gained", delta != null ? (delta > 0 ? "+" : "") + delta : "—"], ["Goal", state.startWeight + 13]].map(([k, v], i) => (
                     <div key={k}>
                       <div style={{ fontSize: 11, fontWeight: 800, color: C.gray, textTransform: "uppercase" }}>{k}</div>
                       <div style={{ fontSize: 24, fontWeight: 900, color: i === 2 ? C.blue : C.ink }}>{v}</div>
@@ -794,6 +893,19 @@ function GainCoach() {
                 </div>
               )}
             </div>
+
+            {pace && (
+              <div style={S.card}>
+                <p style={S.label}>Pace · target 1 lb/week</p>
+                <div style={{ fontSize: 15, fontWeight: 700, lineHeight: 1.5 }}>
+                  Week {pace.wks.toFixed(1)}. You should be at <b>{pace.should.toFixed(1)}</b>, you're at <b>{latest}</b>.
+                </div>
+                <div style={{ fontSize: 22, fontWeight: 900, marginTop: 6, color: Math.abs(pace.diff) <= 1.5 ? C.ok : pace.diff < 0 ? C.warn : C.blue }}>
+                  {Math.abs(pace.diff) <= 1.5 ? "On pace ✓" : pace.diff < 0 ? `${Math.abs(pace.diff).toFixed(1)} lb behind` : `${pace.diff.toFixed(1)} lb ahead`}
+                </div>
+              </div>
+            )}
+
             <div style={S.card}>
               <p style={S.label}>Log today's weight</p>
               <div style={{ display: "flex", gap: 10 }}>
@@ -801,39 +913,67 @@ function GainCoach() {
                 <button style={S.btn} onClick={() => logWeight(false)}>Log</button>
               </div>
             </div>
-            <div style={S.card}>
-              <p style={S.label}>All-time</p>
-              <div style={{ display: "flex", justifyContent: "space-between", textAlign: "center" }}>
-                {[["Cal", (state.totals?.cal || 0).toLocaleString(), C.blue], ["Shakes", state.totals?.shakes || 0, C.ink], ["Workouts", state.totals?.workouts || 0, C.ink], ["Streak", `🔥${state.streak || 0}`, C.ink]].map(([k, v, col]) => (
-                  <div key={k}>
-                    <div style={{ fontSize: 11, fontWeight: 800, color: C.gray, textTransform: "uppercase" }}>{k}</div>
-                    <div style={{ fontSize: 22, fontWeight: 900, color: col }}>{v}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
+
             <div style={S.card}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                 <p style={{ ...S.label, margin: 0 }}>Growth chart</p>
                 <div style={{ display: "flex", gap: 4 }}>
-                  {["1W", "1M", "3M", "ALL"].map((r) => (
+                  {["1M", "3M", "ALL"].map((r) => (
                     <button key={r} onClick={() => setRange(r)} style={{ padding: "5px 9px", fontSize: 11, fontWeight: 800, borderRadius: 8, border: `2px solid ${C.ink}`, background: range === r ? C.blue : "#fff", color: range === r ? "#fff" : C.ink, cursor: "pointer" }}>{r}</button>
                   ))}
                 </div>
               </div>
-              <Chart pts={pts} sPts={sPts} />
+              <Chart pts={pts} sPts={sPts} startWeight={state.startWeight} startT={startT} rateNow={rateNow} />
             </div>
+
+            <div style={S.card}>
+              <p style={S.label}>Novice → intermediate</p>
+              <p style={{ fontSize: 13, color: C.gray, margin: "0 0 10px", lineHeight: 1.5 }}>
+                Strength relative to your {bw} lb bodyweight. Hitting these, or stalling for 3 weeks, is what ends the novice phase — not the calendar.
+              </p>
+              {STANDARDS.map((st) => {
+                const now = state.liftWeights[st.id] || 0;
+                const goal = Math.round(bw * st.mult);
+                const pct = Math.min(1, now / goal);
+                return (
+                  <div key={st.id} style={{ marginBottom: 10 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, fontWeight: 700 }}>
+                      <span>{st.name}</span>
+                      <span style={{ color: now >= goal ? C.ok : C.gray }}>{now} / {goal} lb</span>
+                    </div>
+                    <div style={{ height: 6, borderRadius: 3, background: C.line, marginTop: 4, overflow: "hidden" }}>
+                      <div style={{ height: "100%", width: `${pct * 100}%`, background: now >= goal ? C.ok : C.blue }} />
+                    </div>
+                  </div>
+                );
+              })}
+              <div style={{ fontSize: 13, fontWeight: 800, marginTop: 10, color: phase === "novice" ? C.blue : C.warn }}>
+                Currently: {phase === "novice" ? "novice — adding weight weekly, gain at 1 lb/wk" : "intermediate — progression stalled, gain at 0.5 lb/wk"}
+              </div>
+            </div>
+
+            <div style={S.card}>
+              <p style={S.label}>All-time</p>
+              <div style={{ display: "flex", justifyContent: "space-between", textAlign: "center" }}>
+                {[["Workouts", state.totals?.workouts || 0], ["Streak", `🔥${state.streak || 0}`], ["Weigh-ins", state.weights.length]].map(([k, v]) => (
+                  <div key={k}>
+                    <div style={{ fontSize: 11, fontWeight: 800, color: C.gray, textTransform: "uppercase" }}>{k}</div>
+                    <div style={{ fontSize: 22, fontWeight: 900 }}>{v}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
             <div style={S.card}>
               <p style={S.label}>Current lift numbers</p>
-              {[...LIFTS.A, ...LIFTS.B].filter((l) => !BODYWEIGHT_LIFTS.includes(l.id)).map((l) => (
+              {ALL_LIFTS.filter((l) => !NO_WEIGHT.includes(l.id)).map((l) => (
                 <div key={l.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: `1px solid ${C.line}` }}>
-                  <span style={{ fontWeight: 600, fontSize: 15 }}>
+                  <span style={{ fontWeight: 600, fontSize: 14 }}>
                     {l.name}
-                    {state.startLifts && state.liftWeights[l.id] > state.startLifts[l.id] && (
+                    {state.startLifts && state.liftWeights[l.id] > (state.startLifts[l.id] ?? 0) && (
                       <span style={{ color: C.blue, fontWeight: 900, fontSize: 13 }}> +{state.liftWeights[l.id] - state.startLifts[l.id]}</span>
                     )}
                   </span>
-                  {/* keyed on the value so the field refreshes after a workout bumps it */}
                   <input key={`${l.id}:${state.liftWeights[l.id]}`} type="number" inputMode="decimal"
                     defaultValue={state.liftWeights[l.id]} onBlur={(ev) => setLift(l.id, ev.target.value)}
                     style={{ width: 74, padding: "6px 8px", fontSize: 15, fontWeight: 700, border: `2px solid ${C.ink}`, borderRadius: 8, textAlign: "right" }} />
@@ -847,9 +987,20 @@ function GainCoach() {
           <>
             <div style={S.header}><h1 style={S.h1}>Settings</h1></div>
             <div style={S.card}>
+              <p style={S.label}>The plan</p>
+              <div style={{ fontSize: 14, lineHeight: 1.7 }}>
+                <div><b>{calTarget.toLocaleString()}</b> cal/day · <b>{proteinTarget}g</b> protein</div>
+                <div><b>{rateNow} lb/week</b> · phase: <b>{phase}</b></div>
+                <div>4 lifts/week · 10–20 sets per muscle</div>
+                <div style={{ fontSize: 12, color: C.gray, marginTop: 8, lineHeight: 1.5 }}>
+                  Target recalculates off your logged bodyweight. The rate drops to 0.5 lb/week only when your strength stalls for 3 weeks — typically 6–12 months in, not on a fixed date.
+                </div>
+              </div>
+            </div>
+            <div style={S.card}>
               <p style={S.label}>Gym heads-up</p>
-              <p style={{ fontSize: 14, margin: "0 0 8px" }}>Alert me <b>{state.offsetMin < 60 ? `${state.offsetMin} min` : `${(state.offsetMin / 60).toFixed(1)} hr`}</b> before the workout</p>
-              <input type="range" min="0" max="300" step="5" value={state.offsetMin} onChange={(ev) => { const v = parseInt(ev.target.value); setState((p) => ({ ...p, offsetMin: v })); }} style={{ width: "100%" }} />
+              <p style={{ fontSize: 14, margin: "0 0 8px" }}>Alert me <b>{state.offsetMin} min</b> before</p>
+              <input type="range" min="0" max="90" step="5" value={state.offsetMin} onChange={(ev) => { const v = parseInt(ev.target.value); setState((p) => ({ ...p, offsetMin: v })); }} style={{ width: "100%" }} />
             </div>
             <div style={S.card}>
               <p style={S.label}>Notifications</p>
@@ -865,16 +1016,12 @@ function GainCoach() {
               </div>
             </div>
             <div style={S.card}>
-              <p style={S.label}>Next workout</p>
-              <p style={{ fontSize: 14, margin: "0 0 10px" }}>Next up: Workout <b>{state.nextWorkout}</b>.</p>
-              <button style={{ ...S.btn, background: "#fff", color: C.ink }} onClick={() => setState((p) => ({ ...p, nextWorkout: p.nextWorkout === "A" ? "B" : "A" }))}>Switch to {state.nextWorkout === "A" ? "B" : "A"}</button>
-            </div>
-            <div style={S.card}>
-              <p style={S.label}>Class schedule</p>
+              <p style={S.label}>Week</p>
               {[1, 2, 3, 4, 5].map((d) => {
                 const cs = CLASSES.filter((c) => c.days[d]).map((c) => `${c.code} ${fmt(c.days[d][0])}`);
                 return <div key={d} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: `1px solid ${C.line}`, fontSize: 13, gap: 10 }}>
-                  <b>{DAYS[d]}</b><span style={{ color: C.gray, textAlign: "right" }}>{cs.length ? cs.join(" · ") : "—"}</span>
+                  <b>{DAYS[d]}{WORKOUTS[d] ? ` · ${WORKOUTS[d].name}` : ""}</b>
+                  <span style={{ color: C.gray, textAlign: "right" }}>{cs.length ? cs.join(" · ") : "—"}</span>
                 </div>;
               })}
             </div>
