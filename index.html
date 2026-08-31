@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-title" content="GAINS">
 <meta name="theme-color" content="#F5F4EF">
 <title>GAINS</title>
-<!-- v7.4 -->
+<!-- v7.5 -->
 <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%232743F0'/%3E%3Ctext x='50' y='68' font-size='50' font-weight='900' text-anchor='middle' fill='white' font-family='Helvetica'%3EG%3C/text%3E%3C/svg%3E">
 <style>
   /* ==============================================================
@@ -151,7 +151,7 @@ const strengthStalled = (hist) => {
   if (!older.length || recent.length < 3) return false;
   return Math.max(...recent.map((p) => p.total)) <= Math.max(...older.map((p) => p.total));
 };
-const BASE_DAY_CAL = 3150;
+const BASE_DAY_CAL = 3125;
 
 // ================= FALL 2026 CLASSES =================
 const SEMESTER = { start: "2026-08-31", end: "2026-12-19" };
@@ -252,13 +252,13 @@ const yesterdayKey = () => iso(new Date(Date.now() - 864e5));
 // ================= FOOD =================
 // 3,150 cal / 150g protein, seven small feedings. Two land in the 20-minute
 // gaps between classes. Nothing cooked, nothing blended.
-const CALS = { meal1: 530, bar: 410, mix: 320, snack: 275, prelift: 150, dinner: 1155, night: 310,
+const CALS = { meal1: 530, bar: 410, mix: 320, snack: 275, prelift: 150, dinner: 1035, night: 405,
   weighin: 0, water1: 0, water2: 0, water3: 0 };
-const PROT = { meal1: 19, bar: 30, mix: 8, snack: 8, prelift: 8, dinner: 48, night: 33 };
+const PROT = { meal1: 19, bar: 30, mix: 8, snack: 8, prelift: 8, dinner: 48, night: 36 };
 const TOASTS = {
   meal1: "+530 banked 🥣", bar: "+410 · 30g protein 💪", mix: "+320 banked 🥜",
   snack: "+275 banked 🍌", prelift: "Fueled ⛽", dinner: "+1,120 banked 🍽️",
-  night: "+310 · 33g protein 🌙", weighin: "Logged. Data = gains 📈",
+  night: "+405 · 36g protein 🌙", weighin: "Logged. Data = gains 📈",
   water1: "Hydrated 💧", water2: "Hydrated 💧", water3: "Hydrated 💧",
 };
 const CORE_EVENTS = ["meal1", "bar", "dinner", "night"];
@@ -272,10 +272,9 @@ const PANTRY = [
   { id: "whey", name: "Whey protein", unit: "scoops", pkg: 29, perDay: 1, price: 40, where: "ON Gold Standard 2lb", buy: tgt("optimum nutrition gold standard whey 2lb") },
   { id: "milk", name: "Whole milk", unit: "cups", pkg: 12, perDay: 3, lowAt: 1, price: 4, where: "Target · 3 quart cartons", buy: tgt("whole milk quart") },
   { id: "oats", name: "Oats", unit: "servings", pkg: 22, perDay: 1, price: 6, where: "Quaker 42oz canister", buy: tgt("quaker old fashioned oats 42 oz") },
-  { id: "pb", name: "Peanut butter", unit: "tbsp", pkg: 72, perDay: 4, price: 8, where: "Jif 40oz", buy: tgt("jif creamy peanut butter 40oz") },
+  { id: "pb", name: "Peanut butter", unit: "tbsp", pkg: 72, perDay: 5, price: 8, where: "Jif 40oz", buy: tgt("jif creamy peanut butter 40oz") },
   { id: "mix", name: "Peanuts", unit: "oz", pkg: 34, perDay: 3, price: 8, where: "Dry roasted, 34oz jar", buy: tgt("planters dry roasted peanuts 34 oz") },
   { id: "bananas", name: "Bananas", unit: "", pkg: 12, perDay: 1, price: 3, where: "2 bunches", buy: tgt("bananas") },
-  { id: "oil", name: "Olive oil", unit: "tbsp", pkg: 34, perDay: 1, price: 9, where: "On dinner — 120 cal a spoon", buy: tgt("extra virgin olive oil") },
   { id: "creatine", name: "Creatine", unit: "tsp", pkg: 80, perDay: 1, price: 20, where: "Monohydrate · in water", buy: tgt("creatine monohydrate powder") },
 ];
 const FULL_PANTRY = Object.fromEntries(PANTRY.map((i) => [i.id, i.pkg]));
@@ -285,8 +284,8 @@ const CONSUME = {
   mix: { mix: 2 },
   snack: { bananas: 1, mix: 1 },
   prelift: { milk: 1 },
-  dinner: { milk: 1, oil: 1 },
-  night: { whey: 1, pb: 2 },
+  dinner: { milk: 1 },
+  night: { whey: 1, pb: 3 },
 };
 
 const VIDEOS = {
@@ -309,12 +308,11 @@ const fmt = (mins) => {
 // be seated by 8:15. When a late lift would push it past this, the evening
 // flips: eat first, train once it settles.
 const DINNER_BY = T(20, 15);
-const DINNER_SUB = "1,155 cal · 48g · same plate every night";
+const DINNER_SUB = "1,035 cal · 48g · same plate every night";
 const DINNER_STEPS = [
   "2 palm-size portions of the protein — chicken, beef, fish",
   "2 cups of the starch — rice, pasta, potatoes",
   "Vegetables, whatever's there",
-  "1 tbsp olive oil over it",
   "1 cup whole milk",
   "Still hungry? Bread roll or dessert",
 ];
@@ -390,8 +388,8 @@ const buildEvents = (date, offsetMin, liftWeights) => {
   { const r = seq(T(20, 0), 2); out.push({ id: "water2", time: r.t, moved: r.moved, title: "Water — 16oz", sub: "", steps: ["Drink 16oz"] }); }
   {
     const r = seq(T(21, 0), 10);
-    out.push({ id: "night", time: r.t, moved: r.moved, title: "Last Feed", sub: "310 cal · 33g",
-      steps: ["1 scoop whey in water", "2 tbsp peanut butter"] });
+    out.push({ id: "night", time: r.t, moved: r.moved, title: "Last Feed", sub: "405 cal · 36g",
+      steps: ["1 scoop whey in water", "3 tbsp peanut butter"] });
   }
   { const r = seq(T(21, 45), 2); out.push({ id: "water3", time: r.t, moved: r.moved, title: "Water — 8oz", sub: "Taper so you sleep", steps: ["Drink 8oz"] }); }
   return out.sort((a, b) => a.time - b.time);
