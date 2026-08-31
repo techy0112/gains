@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-title" content="GAINS">
 <meta name="theme-color" content="#F5F4EF">
 <title>GAINS</title>
-<!-- v7.3 -->
+<!-- v7.4 -->
 <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%232743F0'/%3E%3Ctext x='50' y='68' font-size='50' font-weight='900' text-anchor='middle' fill='white' font-family='Helvetica'%3EG%3C/text%3E%3C/svg%3E">
 <style>
   /* ==============================================================
@@ -268,11 +268,11 @@ const FLOOR_EVENTS = ["bar", "meal1", "night"];
 
 const tgt = (q) => `https://www.target.com/s?searchTerm=${encodeURIComponent(q)}`;
 const PANTRY = [
-  { id: "bars", name: "MET-Rx BIG 100", unit: "bars", pkg: 9, perDay: 1, price: 20, where: "Target · 9-count box", buy: tgt("met rx big 100") },
+  { id: "bars", name: "MET-Rx BIG 100", unit: "bars", pkg: 18, perDay: 1, price: 40, where: "Target · 2 × 9-count boxes", buy: tgt("met rx big 100") },
   { id: "whey", name: "Whey protein", unit: "scoops", pkg: 29, perDay: 1, price: 40, where: "ON Gold Standard 2lb", buy: tgt("optimum nutrition gold standard whey 2lb") },
   { id: "milk", name: "Whole milk", unit: "cups", pkg: 12, perDay: 3, lowAt: 1, price: 4, where: "Target · 3 quart cartons", buy: tgt("whole milk quart") },
-  { id: "oats", name: "Oatmeal cups", unit: "cups", pkg: 7, perDay: 1, price: 14, where: "Quaker instant", buy: tgt("quaker instant oatmeal cup") },
-  { id: "pb", name: "Peanut butter", unit: "tbsp", pkg: 72, perDay: 4, price: 6, where: "Jif 40oz", buy: tgt("jif creamy peanut butter 40oz") },
+  { id: "oats", name: "Oats", unit: "servings", pkg: 22, perDay: 1, price: 6, where: "Quaker 42oz canister", buy: tgt("quaker old fashioned oats 42 oz") },
+  { id: "pb", name: "Peanut butter", unit: "tbsp", pkg: 72, perDay: 4, price: 8, where: "Jif 40oz", buy: tgt("jif creamy peanut butter 40oz") },
   { id: "mix", name: "Peanuts", unit: "oz", pkg: 34, perDay: 3, price: 8, where: "Dry roasted, 34oz jar", buy: tgt("planters dry roasted peanuts 34 oz") },
   { id: "bananas", name: "Bananas", unit: "", pkg: 12, perDay: 1, price: 3, where: "2 bunches", buy: tgt("bananas") },
   { id: "oil", name: "Olive oil", unit: "tbsp", pkg: 34, perDay: 1, price: 9, where: "On dinner — 120 cal a spoon", buy: tgt("extra virgin olive oil") },
@@ -343,7 +343,7 @@ const buildEvents = (date, offsetMin, liftWeights) => {
   {
     const r = seq(T(9, 15), 15);
     out.push({ id: "meal1", time: r.t, moved: r.moved, title: "Breakfast", sub: "530 cal · 19g",
-      steps: ["Oatmeal cup, hot water", "Stir in 2 tbsp peanut butter", "1 cup whole milk", "5g creatine in water"] });
+      steps: ["2/3 cup oats + hot water in a bowl", "Stir in 2 tbsp peanut butter", "1 cup whole milk", "5g creatine in water"] });
   }
   { const r = seq(T(10, 15), 2); out.push({ id: "water1", time: r.t, moved: r.moved, title: "Water — 16oz", sub: "", steps: ["Drink 16oz"] }); }
   {
