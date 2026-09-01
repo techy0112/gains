@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-title" content="GAINS">
 <meta name="theme-color" content="#F5F4EF">
 <title>GAINS</title>
-<!-- v7.7 -->
+<!-- v7.8 -->
 <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%232743F0'/%3E%3Ctext x='50' y='68' font-size='50' font-weight='900' text-anchor='middle' fill='white' font-family='Helvetica'%3EG%3C/text%3E%3C/svg%3E">
 <style>
   /* ==============================================================
@@ -271,9 +271,9 @@ const FLOOR_EVENTS = ["bar", "meal1", "night"];
 
 const tgt = (q) => `https://www.target.com/s?searchTerm=${encodeURIComponent(q)}`;
 const PANTRY = [
-  { id: "bars", name: "MET-Rx BIG 100", unit: "bars", pkg: 18, perDay: 1, price: 40, where: "Target · 2 × 9-count boxes", buy: tgt("met rx big 100") },
+  { id: "bars", name: "MET-Rx BIG 100", unit: "bars", pkg: 1, perDay: 0, price: 5, where: "Campus market · $4.89 · one each morning", buy: tgt("met rx big 100") },
   { id: "whey", name: "Whey protein", unit: "scoops", pkg: 29, perDay: 1, price: 40, where: "ON Gold Standard 2lb", buy: tgt("optimum nutrition gold standard whey 2lb") },
-  { id: "milk", name: "Whole milk", unit: "cups", pkg: 12, perDay: 3, lowAt: 1, price: 4, where: "Target · 3 quart cartons", buy: tgt("whole milk quart") },
+  { id: "milk", name: "Whole milk", unit: "cups", pkg: 12, perDay: 3, lowAt: 1, price: 4, where: "Target · 3 quart cartons · hall milk at dinner", buy: tgt("whole milk quart") },
   { id: "oats", name: "Instant oatmeal", unit: "packets", pkg: 16, perDay: 1, price: 8, where: "Quaker Maple & Brown Sugar · 2 boxes", buy: tgt("quaker instant oatmeal maple brown sugar") },
   { id: "pb", name: "Peanut butter", unit: "tbsp", pkg: 72, perDay: 5, price: 8, where: "Jif 40oz", buy: tgt("jif creamy peanut butter 40oz") },
   { id: "mix", name: "Peanuts", unit: "oz", pkg: 34, perDay: 3, price: 8, where: "Dry roasted, 34oz jar", buy: tgt("planters dry roasted peanuts 34 oz") },
@@ -868,15 +868,17 @@ function GainCoach() {
             <div style={S.header}><h1 style={S.h1}>Fridge</h1></div>
             {PANTRY.map((item) => {
               const left = state.pantry?.[item.id] ?? item.pkg;
-              const days = left / item.perDay;
-              const low = days <= (item.lowAt ?? 3);
+              const days = item.perDay > 0 ? left / item.perDay : null;
+              const low = days != null && days <= (item.lowAt ?? 3);
               return (
                 <div key={item.id} style={{ ...S.card, borderColor: low ? C.warn : C.ink }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
                     <span style={{ fontWeight: 800, fontSize: 16 }}>{item.name}</span>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: low ? C.warn : C.gray, whiteSpace: "nowrap" }}>
-                      {low ? "⚠️ " : ""}{Math.max(0, Math.round(days))} days left
-                    </span>
+                    {days != null && (
+                      <span style={{ fontSize: 13, fontWeight: 700, color: low ? C.warn : C.gray, whiteSpace: "nowrap" }}>
+                        {low ? "⚠️ " : ""}{Math.max(0, Math.round(days))} days left
+                      </span>
+                    )}
                   </div>
                   <div style={{ height: 8, borderRadius: 4, background: C.line, margin: "10px 0", overflow: "hidden" }}>
                     <div style={{ height: "100%", width: `${Math.min(1, left / item.pkg) * 100}%`, background: low ? C.warn : C.blue, transition: "width 0.4s" }} />
