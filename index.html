@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-title" content="GAINS">
 <meta name="theme-color" content="#F5F4EF">
 <title>GAINS</title>
-<!-- v7.8 -->
+<!-- v7.9 -->
 <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%232743F0'/%3E%3Ctext x='50' y='68' font-size='50' font-weight='900' text-anchor='middle' fill='white' font-family='Helvetica'%3EG%3C/text%3E%3C/svg%3E">
 <style>
   /* ==============================================================
@@ -151,7 +151,7 @@ const strengthStalled = (hist) => {
   if (!older.length || recent.length < 3) return false;
   return Math.max(...recent.map((p) => p.total)) <= Math.max(...older.map((p) => p.total));
 };
-const BASE_DAY_CAL = 3095;
+const BASE_DAY_CAL = 3125;
 
 // ================= FALL 2026 CLASSES =================
 const SEMESTER = { start: "2026-08-31", end: "2026-12-19" };
@@ -255,13 +255,13 @@ const yesterdayKey = () => iso(new Date(Date.now() - 864e5));
 // ================= FOOD =================
 // 3,150 cal / 150g protein, seven small feedings. Two land in the 20-minute
 // gaps between classes. Nothing cooked, nothing blended.
-const CALS = { meal1: 500, bar: 410, mix: 320, snack: 275, prelift: 150, dinner: 1035, night: 405,
+const CALS = { meal1: 500, bar: 410, mix: 340, snack: 275, prelift: 150, dinner: 1035, night: 415,
   weighin: 0, water1: 0, water2: 0, water3: 0 };
-const PROT = { meal1: 19, bar: 30, mix: 8, snack: 8, prelift: 8, dinner: 48, night: 36 };
+const PROT = { meal1: 19, bar: 30, mix: 14, snack: 8, prelift: 8, dinner: 48, night: 36 };
 const TOASTS = {
-  meal1: "+500 banked 🥣", bar: "+410 · 30g protein 💪", mix: "+320 banked 🥜",
+  meal1: "+500 banked 🥣", bar: "+410 · 30g protein 💪", mix: "+340 banked 🥜",
   snack: "+275 banked 🍌", prelift: "Fueled ⛽", dinner: "+1,120 banked 🍽️",
-  night: "+405 · 36g protein 🌙", weighin: "Logged. Data = gains 📈",
+  night: "+415 · 36g protein 🌙", weighin: "Logged. Data = gains 📈",
   water1: "Hydrated 💧", water2: "Hydrated 💧", water3: "Hydrated 💧",
 };
 const CORE_EVENTS = ["meal1", "bar", "dinner", "night"];
@@ -272,11 +272,11 @@ const FLOOR_EVENTS = ["bar", "meal1", "night"];
 const tgt = (q) => `https://www.target.com/s?searchTerm=${encodeURIComponent(q)}`;
 const PANTRY = [
   { id: "bars", name: "MET-Rx BIG 100", unit: "bars", pkg: 1, perDay: 0, price: 5, where: "Campus market · $4.89 · one each morning", buy: tgt("met rx big 100") },
-  { id: "whey", name: "Whey protein", unit: "scoops", pkg: 29, perDay: 1, price: 40, where: "ON Gold Standard 2lb", buy: tgt("optimum nutrition gold standard whey 2lb") },
+  { id: "whey", name: "Whey protein", unit: "scoops", pkg: 21, perDay: 1, price: 40, where: "Levels Grass Fed · 21 scoops", buy: tgt("levels grass fed whey protein") },
   { id: "milk", name: "Whole milk", unit: "cups", pkg: 12, perDay: 3, lowAt: 1, price: 4, where: "Target · 3 quart cartons · hall milk at dinner", buy: tgt("whole milk quart") },
   { id: "oats", name: "Instant oatmeal", unit: "packets", pkg: 16, perDay: 1, price: 8, where: "Quaker Maple & Brown Sugar · 2 boxes", buy: tgt("quaker instant oatmeal maple brown sugar") },
   { id: "pb", name: "Peanut butter", unit: "tbsp", pkg: 72, perDay: 5, price: 8, where: "Jif 40oz", buy: tgt("jif creamy peanut butter 40oz") },
-  { id: "mix", name: "Peanuts", unit: "oz", pkg: 34, perDay: 3, price: 8, where: "Dry roasted, 34oz jar", buy: tgt("planters dry roasted peanuts 34 oz") },
+  { id: "mix", name: "Peanuts", unit: "oz", pkg: 32, perDay: 3, price: 10, where: "Planters Cocktail · 2 × 16oz canisters", buy: tgt("planters cocktail peanuts 16 oz") },
   { id: "bananas", name: "Bananas", unit: "", pkg: 12, perDay: 1, price: 3, where: "2 bunches", buy: tgt("bananas") },
   { id: "creatine", name: "Creatine", unit: "tsp", pkg: 80, perDay: 1, price: 20, where: "Monohydrate · in water", buy: tgt("creatine monohydrate powder") },
 ];
@@ -354,7 +354,7 @@ const buildEvents = (date, offsetMin, liftWeights) => {
   }
   {
     const r = seq(T(12, 40), 5);
-    out.push({ id: "mix", time: r.t, moved: r.moved, title: "Peanuts", sub: "320 cal · 8g", steps: ["2 oz peanuts"] });
+    out.push({ id: "mix", time: r.t, moved: r.moved, title: "Peanuts", sub: "340 cal · 14g", steps: ["2 oz peanuts"] });
   }
   {
     const r = seq(T(14, 15), 5);
@@ -391,7 +391,7 @@ const buildEvents = (date, offsetMin, liftWeights) => {
   { const r = seq(T(20, 0), 2); out.push({ id: "water2", time: r.t, moved: r.moved, title: "Water — 16oz", sub: "", steps: ["Drink 16oz"] }); }
   {
     const r = seq(T(21, 0), 10);
-    out.push({ id: "night", time: r.t, moved: r.moved, title: "Last Feed", sub: "405 cal · 36g",
+    out.push({ id: "night", time: r.t, moved: r.moved, title: "Last Feed", sub: "415 cal · 36g",
       steps: ["1 scoop whey in water", "3 tbsp peanut butter"] });
   }
   { const r = seq(T(21, 45), 2); out.push({ id: "water3", time: r.t, moved: r.moved, title: "Water — 8oz", sub: "Taper so you sleep", steps: ["Drink 8oz"] }); }
