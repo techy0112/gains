@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-title" content="GAINS">
 <meta name="theme-color" content="#F5F4EF">
 <title>GAINS</title>
-<!-- v8.0 -->
+<!-- v8.2 -->
 <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%232743F0'/%3E%3Ctext x='50' y='68' font-size='50' font-weight='900' text-anchor='middle' fill='white' font-family='Helvetica'%3EG%3C/text%3E%3C/svg%3E">
 <style>
   /* ==============================================================
@@ -163,6 +163,13 @@ const CLASSES = [
     onlyDates: ["2026-08-31", "2026-09-21", "2026-10-05", "2026-10-19", "2026-11-02", "2026-11-16", "2026-11-30"] },
 ];
 const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+// Both dates are local "YYYY-MM-DD" strings; rebuild them as local midnights so
+// the difference is whole days regardless of timezone or DST.
+const daysBetween = (a, b) => {
+  const [y1, m1, d1] = a.split("-").map(Number);
+  const [y2, m2, d2] = b.split("-").map(Number);
+  return Math.round((new Date(y2, m2 - 1, d2) - new Date(y1, m1 - 1, d1)) / 864e5);
+};
 const classesOn = (d) => {
   const s = iso(d);
   if (s < SEMESTER.start || s > SEMESTER.end) return [];
@@ -272,7 +279,7 @@ const tgt = (q) => `https://www.target.com/s?searchTerm=${encodeURIComponent(q)}
 const PANTRY = [
   { id: "bars", name: "MET-Rx BIG 100", unit: "bars", pkg: 1, perDay: 0, price: 5, where: "Campus market · $4.89 · one each morning", buy: tgt("met rx big 100") },
   { id: "whey", name: "Whey protein", unit: "scoops", pkg: 21, perDay: 1, price: 40, where: "Levels Grass Fed · 21 scoops", buy: tgt("levels grass fed whey protein") },
-  { id: "milk", name: "Whole milk", unit: "cups", pkg: 12, perDay: 3, lowAt: 1, price: 4, where: "Target · 3 quart cartons · hall milk at dinner", buy: tgt("whole milk quart") },
+  { id: "milk", name: "Whole milk", unit: "cups", pkg: 12, perDay: 2, lowAt: 1, price: 4, where: "Target · 3 quarts · breakfast + afternoon (hall covers dinner)", buy: tgt("whole milk quart") },
   { id: "oats", name: "Instant oatmeal", unit: "packets", pkg: 16, perDay: 1, price: 8, where: "Quaker Maple & Brown Sugar · 2 boxes", buy: tgt("quaker instant oatmeal maple brown sugar") },
   { id: "pb", name: "Peanut butter", unit: "tbsp", pkg: 72, perDay: 5, price: 8, where: "Jif 40oz", buy: tgt("jif creamy peanut butter 40oz") },
   { id: "mix", name: "Peanuts", unit: "oz", pkg: 32, perDay: 3, price: 10, where: "Planters Cocktail · 2 × 16oz canisters", buy: tgt("planters cocktail peanuts 16 oz") },
@@ -280,13 +287,14 @@ const PANTRY = [
   { id: "creatine", name: "Creatine", unit: "tsp", pkg: 80, perDay: 1, price: 20, where: "Monohydrate · in water", buy: tgt("creatine monohydrate powder") },
 ];
 const FULL_PANTRY = Object.fromEntries(PANTRY.map((i) => [i.id, i.pkg]));
+// What each feed draws from YOUR stock. The bar is bought and eaten the same
+// morning (never stocked), and dinner milk is the dining hall's — neither
+// touches the fridge counts.
 const CONSUME = {
   meal1: { oats: 1, pb: 2, milk: 1, creatine: 1 },
-  bar: { bars: 1 },
   mix: { mix: 2 },
   snack: { bananas: 1, mix: 1 },
   prelift: { milk: 1 },
-  dinner: { milk: 1 },
   night: { whey: 1, pb: 3 },
 };
 
@@ -681,7 +689,7 @@ function GainCoach() {
     setState((p) => ({ ...p, pantry: { ...p.pantry, [item.id]: item.pkg } }));
     showToast(`${item.name} restocked 🛒`);
   };
-  const startPlan = () => setState((p) => ({ ...p, startDate: new Date().toISOString().slice(0, 10), startLifts: { ...p.liftWeights } }));
+  const startPlan = () => setState((p) => ({ ...p, startDate: todayKey(), startLifts: { ...p.liftWeights } }));
   const toggleNotifs = async () => {
     if (state.notifOn) { setState((s) => ({ ...s, notifOn: false })); showToast("Notifications off"); return; }
     if (typeof Notification === "undefined") { alert("Notifications aren't supported here."); return; }
@@ -700,7 +708,7 @@ function GainCoach() {
   const latest = state.weights.length ? state.weights[state.weights.length - 1].lbs : null;
   const delta = latest != null && state.startWeight != null ? (latest - state.startWeight).toFixed(1) : null;
   const startT = state.weights.length ? state.weights[0].t : null;
-  const dayN = state.startDate ? Math.floor((Date.now() - new Date(state.startDate).getTime()) / 864e5) + 1 : null;
+  const dayN = state.startDate ? daysBetween(state.startDate, todayKey()) + 1 : null;
   const weekN = dayN ? Math.floor((dayN - 1) / 7) + 1 : null;
 
   const calsToday = events.reduce((a, e) => a + (state.checks[e.id] === true ? CALS[e.id] || 0 : 0), 0);
@@ -866,6 +874,13 @@ function GainCoach() {
           <>
             <div style={S.header}><h1 style={S.h1}>Fridge</h1></div>
             {PANTRY.map((item) => {
+              if (item.perDay === 0) return (
+                <div key={item.id} style={S.card}>
+                  <span style={{ fontWeight: 800, fontSize: 16 }}>{item.name}</span>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: C.gray, margin: "6px 0 10px" }}>{item.where} — bought fresh, not stocked</div>
+                  <a href={item.buy} target="_blank" rel="noopener" style={{ ...S.btn, display: "block", padding: 10, background: "#fff", color: C.ink, textAlign: "center", textDecoration: "none" }}>🎯 Target</a>
+                </div>
+              );
               const left = state.pantry?.[item.id] ?? item.pkg;
               const days = item.perDay > 0 ? left / item.perDay : null;
               const low = days != null && days <= (item.lowAt ?? 3);
@@ -896,7 +911,7 @@ function GainCoach() {
                 <span>Restock low</span><span style={{ color: C.warn }}>~${lowItems.reduce((a, i) => a + i.price, 0)}</span>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 15, fontWeight: 700 }}>
-                <span>Full week</span><span style={{ color: C.blue }}>~${PANTRY.reduce((a, i) => a + i.price, 0)}</span>
+                <span>Full restock</span><span style={{ color: C.blue }}>~${PANTRY.filter((i) => i.perDay > 0).reduce((a, i) => a + i.price, 0)}</span>
               </div>
             </div>
           </>
