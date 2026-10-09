@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-title" content="GAINS">
 <meta name="theme-color" content="#F5F4EF">
 <title>GAINS</title>
-<!-- v8.3 -->
+<!-- v9.0 -->
 <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%232743F0'/%3E%3Ctext x='50' y='68' font-size='50' font-weight='900' text-anchor='middle' fill='white' font-family='Helvetica'%3EG%3C/text%3E%3C/svg%3E">
 <style>
   /* ==============================================================
@@ -261,41 +261,38 @@ const yesterdayKey = () => iso(new Date(Date.now() - 864e5));
 // ================= FOOD =================
 // 3,150 cal / 150g protein, seven small feedings. Two land in the 20-minute
 // gaps between classes. Nothing cooked, nothing blended.
-const CALS = { meal1: 500, bar: 410, mix: 340, snack: 275, prelift: 150, dinner: 1035, night: 415,
+const CALS = { shake: 415, hall1: 1035, nuts1: 255, nuts2: 255, hall2: 1035, night: 190,
   weighin: 0, water1: 0, water2: 0, water3: 0 };
-const PROT = { meal1: 19, bar: 30, mix: 14, snack: 8, prelift: 8, dinner: 48, night: 36 };
+const PROT = { shake: 36, hall1: 48, nuts1: 10, nuts2: 10, hall2: 48, night: 8 };
 const TOASTS = {
-  meal1: "+500 banked 🥣", bar: "+410 · 30g protein 💪", mix: "+340 banked 🥜",
-  snack: "+275 banked 🍌", prelift: "Fueled ⛽", dinner: "+1,120 banked 🍽️",
-  night: "+415 · 36g protein 🌙", weighin: "Logged. Data = gains 📈",
+  shake: "+415 · 36g protein 🥤", hall1: "+1,035 banked 🍽️", nuts1: "+255 banked 🥜",
+  nuts2: "+255 banked 🥜", hall2: "+1,035 banked 🍽️", night: "+190 banked 🌙",
+  weighin: "Logged. Data = gains 📈",
   water1: "Hydrated 💧", water2: "Hydrated 💧", water3: "Hydrated 💧",
 };
-const CORE_EVENTS = ["meal1", "bar", "dinner", "night"];
-// The floor: on a wrecked day, these three alone still count. A bad day that
-// ends in "I already blew it" is what actually breaks a bulk.
-const FLOOR_EVENTS = ["bar", "meal1", "night"];
+// The floor: on a wrecked day these three alone still count. Roughly
+// maintenance, so a bad day costs you progress but never ground.
+const FLOOR_EVENTS = ["shake", "hall2", "night"];
 
 const tgt = (q) => `https://www.target.com/s?searchTerm=${encodeURIComponent(q)}`;
+// Room stock is shelf-stable only — nothing to refrigerate, cook, or watch for
+// spoilage. Milk comes from the dining hall with the meals. This is what
+// finally makes the under-8-inch fridge irrelevant.
 const PANTRY = [
-  { id: "bars", name: "MET-Rx BIG 100", unit: "bars", pkg: 1, perDay: 0, price: 5, where: "Campus market · $4.89 · one each morning", buy: tgt("met rx big 100") },
   { id: "whey", name: "Whey protein", unit: "scoops", pkg: 21, perDay: 1, price: 40, where: "Levels Grass Fed · 21 scoops", buy: tgt("levels grass fed whey protein") },
-  { id: "milk", name: "Whole milk", unit: "cups", pkg: 12, perDay: 2, lowAt: 1, price: 4, where: "Target · 3 quarts · breakfast + afternoon (hall covers dinner)", buy: tgt("whole milk quart") },
-  { id: "oats", name: "Instant oatmeal", unit: "packets", pkg: 16, perDay: 1, price: 8, where: "Quaker Maple & Brown Sugar · 2 boxes", buy: tgt("quaker instant oatmeal maple brown sugar") },
   { id: "pb", name: "Peanut butter", unit: "tbsp", pkg: 72, perDay: 5, price: 8, where: "Jif 40oz", buy: tgt("jif creamy peanut butter 40oz") },
-  { id: "mix", name: "Peanuts", unit: "oz", pkg: 32, perDay: 3, price: 10, where: "Planters Cocktail · 2 × 16oz canisters", buy: tgt("planters cocktail peanuts 16 oz") },
-  { id: "bananas", name: "Bananas", unit: "", pkg: 12, perDay: 1, price: 3, where: "2 bunches", buy: tgt("bananas") },
-  { id: "creatine", name: "Creatine", unit: "tsp", pkg: 80, perDay: 1, price: 20, where: "Monohydrate · in water", buy: tgt("creatine monohydrate powder") },
+  { id: "mix", name: "Peanuts", unit: "oz", pkg: 32, perDay: 3, price: 10, where: "Planters Cocktail · 2 × 16oz", buy: tgt("planters cocktail peanuts 16 oz") },
+  { id: "creatine", name: "Creatine", unit: "tsp", pkg: 80, perDay: 1, price: 20, where: "ON Micronized · in the shake", buy: tgt("creatine monohydrate powder") },
 ];
 const FULL_PANTRY = Object.fromEntries(PANTRY.map((i) => [i.id, i.pkg]));
 // What each feed draws from YOUR stock. The bar is bought and eaten the same
 // morning (never stocked), and dinner milk is the dining hall's — neither
 // touches the fridge counts.
 const CONSUME = {
-  meal1: { oats: 1, pb: 2, milk: 1, creatine: 1 },
-  mix: { mix: 2 },
-  snack: { bananas: 1, mix: 1 },
-  prelift: { milk: 1 },
-  night: { whey: 1, pb: 3 },
+  shake: { whey: 1, pb: 3, creatine: 1 },
+  nuts1: { mix: 1.5 },
+  nuts2: { mix: 1.5 },
+  night: { pb: 2 },
 };
 
 const VIDEOS = {
@@ -318,14 +315,16 @@ const fmt = (mins) => {
 // be seated by 8:15. When a late lift would push it past this, the evening
 // flips: eat first, train once it settles.
 const DINNER_BY = T(20, 15);
-const DINNER_SUB = "1,035 cal · 48g · same plate every night";
-const DINNER_STEPS = [
-  "2 palm-size portions of the protein — chicken, beef, fish",
+const HALL_SUB = "1,035 cal · 48g · same plate every time";
+const HALL_STEPS = [
+  "2 palm-size portions of the protein",
   "2 cups of the starch — rice, pasta, potatoes",
   "Vegetables, whatever's there",
-  "1 cup whole milk",
+  "Fill the glass with whole milk",
   "Still hungry? Bread roll or dessert",
 ];
+// If the hall is shut, this is the swap — same ballpark from room stock.
+const HALL_FALLBACK = "Hall closed? 1 scoop whey + 4 tbsp PB + 2 oz peanuts";
 
 // ================= DAY =================
 const buildEvents = (date, offsetMin, liftWeights) => {
@@ -333,75 +332,67 @@ const buildEvents = (date, offsetMin, liftWeights) => {
   const busy = classesOn(date);
   const w = WORKOUTS[dow];
   const out = [];
-  let last = -Infinity;
-  const seq = (pref, dur) => {
-    const r = after(Math.max(pref, last + 10), dur, busy);
-    last = r.t;
-    return r;
-  };
 
-  // 85 = 75 min session + travel, so Encounter Mondays push the lift after class
   let liftT = null, liftMoved = null;
   if (w) { const r = after(T(16, 15), 85, busy); liftT = r.t; liftMoved = r.moved; }
 
-  if (dow === 0) {
-    const r = seq(T(9, 0), 5);
-    out.push({ id: "weighin", time: r.t, moved: r.moved, title: "Weigh In", sub: "Same conditions every week", steps: ["Step on the scale", "Log it below"] });
-  }
-  {
-    const r = seq(T(9, 15), 15);
-    out.push({ id: "meal1", time: r.t, moved: r.moved, title: "Breakfast", sub: "500 cal · 19g",
-      steps: ["1 packet instant oatmeal + hot water", "Stir in 2 tbsp peanut butter", "1 cup whole milk", "5g creatine in water"] });
-  }
-  { const r = seq(T(10, 15), 2); out.push({ id: "water1", time: r.t, moved: r.moved, title: "Water — 16oz", sub: "", steps: ["Drink 16oz"] }); }
-  {
-    const r = seq(T(10, 45), 5);
-    out.push({ id: "bar", time: r.t, moved: r.moved, title: "Protein Bar", sub: "410 cal · 30g",
-      steps: ["MET-Rx BIG 100", "Eat it walking to class"] });
-  }
-  {
-    const r = seq(T(12, 40), 5);
-    out.push({ id: "mix", time: r.t, moved: r.moved, title: "Peanuts", sub: "340 cal · 14g", steps: ["2 oz peanuts"] });
-  }
-  {
-    const r = seq(T(14, 15), 5);
-    out.push({ id: "snack", time: r.t, moved: r.moved, title: "Banana + Peanuts", sub: "275 cal · 8g", steps: ["1 banana", "1 oz peanuts"] });
-  }
-  const pushLift = (t, moved) => {
-    const pre = Math.max(t - offsetMin, lastEndBefore(t, busy));
-    out.push({ id: "prelift", time: pre, moved: null, title: "Head to Gym", sub: "150 cal · 8g", steps: ["1 cup whole milk", "Fill your bottle", "Go"] });
-    out.push({ id: "lift", time: t, moved, title: w.name, sub: "Last rep hard · 1-2 in reserve",
-      steps: w.lifts.map((l) => `${l.name} — ${l.sets}×${l.reps}${NO_WEIGHT.includes(l.id) ? "" : ` @ ${liftWeights[l.id]} lbs`}`) });
-  };
+  if (dow === 0) out.push({ id: "weighin", time: T(9, 0), moved: null, title: "Weigh In",
+    sub: "Same conditions every week", steps: ["Step on the scale", "Log it below"] });
 
-  // Would training first push dinner past the hall cutoff?
+  out.push({ id: "shake", time: T(9, 15), moved: null, title: "Shake", sub: "415 cal · 36g",
+    steps: ["1 scoop whey + 8oz water", "5g creatine in the same bottle", "Shake 20 sec, drink", "3 tbsp peanut butter"] });
+
+  out.push({ id: "water1", time: T(10, 10), moved: null, title: "Water — 16oz", sub: "", steps: ["Drink 16oz"] });
+
+  // Hall meal 1 goes BEFORE the first class, not at a conventional lunch hour.
+  // Mon/Thu run 11:20-3:45 with only two 20-minute gaps, and no dining hall is
+  // serving at 3:50, so the only real window is the morning.
+  const h1 = before(T(12, 30), 40, busy);
+  out.push({ id: "hall1", time: h1.t, moved: h1.moved, title: "Hall Meal", sub: HALL_SUB,
+    steps: [...HALL_STEPS, HALL_FALLBACK] });
+
+  // first peanut hit: two hours after the hall meal, slid out of any class
+  const n1 = after(Math.max(h1.t + 120, T(12, 40)), 5, busy);
+  out.push({ id: "nuts1", time: n1.t, moved: n1.moved, title: "Peanuts", sub: "255 cal · 10g", steps: ["1.5 oz peanuts (about 50)"] });
+
+  const pushLift = (t, moved) => out.push({ id: "lift", time: t, moved, title: w.name,
+    sub: "Last rep hard · 1-2 in reserve",
+    steps: w.lifts.map((l) => `${l.name} — ${l.sets}×${l.reps}${NO_WEIGHT.includes(l.id) ? "" : ` @ ${liftWeights[l.id]} lbs`}`) });
+
+  // Would training first push the second hall meal past closing?
   const flip = !!w && Math.max(T(19, 0), liftT + 85 + 20) > DINNER_BY;
-
+  let nightFloor, hallEnd;
   if (w && flip) {
-    // eat as soon as the last class lets out, then train once it settles
-    const d = after(Math.max(lastEndBefore(T(23, 59), busy) + 5, T(17, 30)), 30, busy);
-    out.push({ id: "dinner", time: d.t, moved: d.moved, title: "Dinner", sub: DINNER_SUB, steps: DINNER_STEPS });
-    liftT = d.t + 70;                       // 30 to eat, 40 to settle
+    const d = after(Math.max(lastEndBefore(T(23, 59), busy) + 5, T(17, 30)), 40, busy);
+    out.push({ id: "hall2", time: d.t, moved: d.moved, title: "Hall Meal", sub: HALL_SUB, steps: [...HALL_STEPS, HALL_FALLBACK] });
+    liftT = d.t + 70;                       // 40 to eat, 30 to settle
+    hallEnd = d.t + 40;
     pushLift(liftT, liftMoved);
-    last = liftT + 75;
-  } else if (w) {
-    pushLift(liftT, liftMoved);
-    last = liftT + 85;
-    const r = seq(T(19, 0), 30);
-    out.push({ id: "dinner", time: r.t, moved: r.moved, title: "Dinner", sub: DINNER_SUB, steps: DINNER_STEPS });
+    nightFloor = liftT + 75 + 30;
   } else {
-    const a = seq(T(16, 15), 5);
-    out.push({ id: "prelift", time: a.t, moved: a.moved, title: "Afternoon Milk", sub: "150 cal · 8g", steps: ["1 cup whole milk"] });
-    const r = seq(T(19, 0), 30);
-    out.push({ id: "dinner", time: r.t, moved: r.moved, title: "Dinner", sub: DINNER_SUB, steps: DINNER_STEPS });
+    if (w) pushLift(liftT, liftMoved);
+    const r = after(T(19, 0), 40, busy);
+    out.push({ id: "hall2", time: r.t, moved: r.moved, title: "Hall Meal", sub: HALL_SUB, steps: [...HALL_STEPS, HALL_FALLBACK] });
+    nightFloor = r.t + 100;
+    hallEnd = -Infinity;
   }
-  { const r = seq(T(20, 0), 2); out.push({ id: "water2", time: r.t, moved: r.moved, title: "Water — 16oz", sub: "", steps: ["Drink 16oz"] }); }
-  {
-    const r = seq(T(21, 0), 10);
-    out.push({ id: "night", time: r.t, moved: r.moved, title: "Last Feed", sub: "415 cal · 36g",
-      steps: ["1 scoop whey in water", "3 tbsp peanut butter"] });
+
+  // Placed only now that liftT is final — on a flipped evening this has to fall
+  // AFTER the hall meal, not before it.
+  if (w) {
+    const pre = Math.max(liftT - offsetMin, lastEndBefore(liftT, busy), hallEnd + 5);
+    out.push({ id: "nuts2", time: pre, moved: null, title: "Peanuts + Head to Gym", sub: "255 cal · 10g",
+      steps: ["1.5 oz peanuts", "Fill your water bottle", "Go"] });
+  } else {
+    const n2 = after(T(15, 50), 5, busy);
+    out.push({ id: "nuts2", time: n2.t, moved: n2.moved, title: "Peanuts", sub: "255 cal · 10g", steps: ["1.5 oz peanuts"] });
   }
-  { const r = seq(T(21, 45), 2); out.push({ id: "water3", time: r.t, moved: r.moved, title: "Water — 8oz", sub: "Taper so you sleep", steps: ["Drink 8oz"] }); }
+
+  out.push({ id: "water2", time: nightFloor - 40, moved: null, title: "Water — 16oz", sub: "", steps: ["Drink 16oz"] });
+  out.push({ id: "night", time: Math.max(T(21, 0), nightFloor), moved: null, title: "Last Feed", sub: "190 cal · 8g",
+    steps: ["2 tbsp peanut butter"] });
+  out.push({ id: "water3", time: Math.max(T(21, 45), nightFloor + 45), moved: null, title: "Water — 8oz", sub: "Taper so you sleep", steps: ["Drink 8oz"] });
+
   return out.sort((a, b) => a.time - b.time);
 };
 
