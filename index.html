@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-title" content="GAINS">
 <meta name="theme-color" content="#000000">
 <title>GAINS</title>
-<!-- v9.2 -->
+<!-- v9.3 -->
 <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%23000000'/%3E%3Ctext x='50' y='68' font-size='50' font-weight='900' text-anchor='middle' fill='white' font-family='Helvetica'%3EG%3C/text%3E%3C/svg%3E">
 <style>
   /* ==============================================================
@@ -160,7 +160,7 @@ const strengthStalled = (hist) => {
 // What the fixed day below actually delivers. Keep this in step with CALS —
 // calGap drives the "add N calories" banner, so a stale value here silently
 // under-reports how far short of target the day is.
-const BASE_DAY_CAL = 3255;
+const BASE_DAY_CAL = 3185;
 
 // ================= FALL 2026 CLASSES =================
 const SEMESTER = { start: "2026-08-31", end: "2026-12-19" };
@@ -270,12 +270,12 @@ const yesterdayKey = () => iso(new Date(Date.now() - 864e5));
 // ================= FOOD =================
 // 3,150 cal / 150g protein, seven small feedings. Two land in the 20-minute
 // gaps between classes. Nothing cooked, nothing blended.
-const CALS = { shake: 415, hall1: 1035, nuts1: 290, nuts2: 290, hall2: 1035, night: 190,
+const CALS = { shake: 415, hall1: 1035, nuts1: 340, nuts2: 170, hall2: 1035, night: 190,
   weighin: 0, water1: 0, water2: 0, water3: 0 };
-const PROT = { shake: 36, hall1: 48, nuts1: 13, nuts2: 13, hall2: 48, night: 8 };
+const PROT = { shake: 36, hall1: 48, nuts1: 14, nuts2: 7, hall2: 48, night: 8 };
 const TOASTS = {
-  shake: "+415 · 36g protein 🥤", hall1: "+1,035 banked 🍽️", nuts1: "+290 banked 🥜",
-  nuts2: "+290 banked 🥜", hall2: "+1,035 banked 🍽️", night: "+190 banked 🌙",
+  shake: "+415 · 36g protein 🥤", hall1: "+1,035 banked 🍽️", nuts1: "+340 banked 🥜",
+  nuts2: "+170 banked 🥜", hall2: "+1,035 banked 🍽️", night: "+190 banked 🌙",
   weighin: "Logged. Data = gains 📈",
   water1: "Hydrated 💧", water2: "Hydrated 💧", water3: "Hydrated 💧",
 };
@@ -290,7 +290,7 @@ const tgt = (q) => `https://www.target.com/s?searchTerm=${encodeURIComponent(q)}
 const PANTRY = [
   { id: "whey", name: "Whey protein", unit: "scoops", pkg: 21, perDay: 1, price: 40, where: "Levels Grass Fed · 21 scoops", buy: tgt("levels grass fed whey protein") },
   { id: "pb", name: "Peanut butter", unit: "tbsp", pkg: 72, perDay: 5, price: 8, where: "Jif 40oz", buy: tgt("jif creamy peanut butter 40oz") },
-  { id: "mix", name: "Peanut packets", unit: "packets", pkg: 18, perDay: 2, price: 14, where: "Planters Salted 1.75oz · multipack", buy: tgt("planters salted peanuts 1.75 oz multipack") },
+  { id: "mix", name: "Peanut packets", unit: "packets", pkg: 30, perDay: 3, price: 10, where: "Planters Salted 1oz · 3 × 10-pack", buy: tgt("planters salted peanuts 10 pack 1 oz") },
   { id: "creatine", name: "Creatine", unit: "tsp", pkg: 80, perDay: 1, price: 20, where: "ON Micronized · in the shake", buy: tgt("creatine monohydrate powder") },
 ];
 const FULL_PANTRY = Object.fromEntries(PANTRY.map((i) => [i.id, i.pkg]));
@@ -299,7 +299,7 @@ const FULL_PANTRY = Object.fromEntries(PANTRY.map((i) => [i.id, i.pkg]));
 // touches the fridge counts.
 const CONSUME = {
   shake: { whey: 1, pb: 3, creatine: 1 },
-  nuts1: { mix: 1 },
+  nuts1: { mix: 2 },
   nuts2: { mix: 1 },
   night: { pb: 2 },
 };
@@ -333,7 +333,7 @@ const HALL_STEPS = [
   "Still hungry? Bread roll or dessert",
 ];
 // If the hall is shut, this is the swap — same ballpark from room stock.
-const HALL_FALLBACK = "Hall closed? 1 scoop whey + 4 tbsp PB + 1 peanut packet";
+const HALL_FALLBACK = "Hall closed? 1 scoop whey + 4 tbsp PB + 2 peanut packets";
 
 // ================= DAY =================
 const buildEvents = (date, offsetMin, liftWeights) => {
@@ -362,7 +362,7 @@ const buildEvents = (date, offsetMin, liftWeights) => {
 
   // first peanut hit: two hours after the hall meal, slid out of any class
   const n1 = after(Math.max(h1.t + 120, T(12, 40)), 5, busy);
-  out.push({ id: "nuts1", time: n1.t, moved: n1.moved, title: "Peanuts", sub: "290 cal · 13g", steps: ["1 packet (1.75oz)"] });
+  out.push({ id: "nuts1", time: n1.t, moved: n1.moved, title: "Peanuts", sub: "340 cal · 14g", steps: ["2 packets"] });
 
   const pushLift = (t, moved) => out.push({ id: "lift", time: t, moved, title: w.name,
     sub: "Last rep hard · 1-2 in reserve",
@@ -390,11 +390,11 @@ const buildEvents = (date, offsetMin, liftWeights) => {
   // AFTER the hall meal, not before it.
   if (w) {
     const pre = Math.max(liftT - offsetMin, lastEndBefore(liftT, busy), hallEnd + 5);
-    out.push({ id: "nuts2", time: pre, moved: null, title: "Peanuts + Head to Gym", sub: "290 cal · 13g",
-      steps: ["1 packet (1.75oz)", "Fill your water bottle", "Go"] });
+    out.push({ id: "nuts2", time: pre, moved: null, title: "Peanuts + Head to Gym", sub: "170 cal · 7g",
+      steps: ["1 packet", "Fill your water bottle", "Go"] });
   } else {
     const n2 = after(T(15, 50), 5, busy);
-    out.push({ id: "nuts2", time: n2.t, moved: n2.moved, title: "Peanuts", sub: "290 cal · 13g", steps: ["1 packet (1.75oz)"] });
+    out.push({ id: "nuts2", time: n2.t, moved: n2.moved, title: "Peanuts", sub: "170 cal · 7g", steps: ["1 packet"] });
   }
 
   out.push({ id: "water2", time: nightFloor - 40, moved: null, title: "Water — 16oz", sub: "", steps: ["Drink 16oz"] });
@@ -912,10 +912,10 @@ function GainCoach() {
             })}
             <div style={S.card}>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 15, fontWeight: 700, marginBottom: 6 }}>
-                <span>Restock low</span><span style={{ color: C.warn }}>~${lowItems.reduce((a, i) => a + i.price, 0)}</span>
+                <span>Restock low</span><span style={{ color: C.warn }}>~${Math.round(lowItems.reduce((a, i) => a + i.price, 0))}</span>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 15, fontWeight: 700 }}>
-                <span>Full restock</span><span style={{ color: C.blue }}>~${PANTRY.filter((i) => i.perDay > 0).reduce((a, i) => a + i.price, 0)}</span>
+                <span>Full restock</span><span style={{ color: C.blue }}>~${Math.round(PANTRY.filter((i) => i.perDay > 0).reduce((a, i) => a + i.price, 0))}</span>
               </div>
             </div>
           </>
