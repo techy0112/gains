@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-title" content="GAINS">
 <meta name="theme-color" content="#000000">
 <title>GAINS</title>
-<!-- v9.3 -->
+<!-- v9.4 -->
 <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%23000000'/%3E%3Ctext x='50' y='68' font-size='50' font-weight='900' text-anchor='middle' fill='white' font-family='Helvetica'%3EG%3C/text%3E%3C/svg%3E">
 <style>
   /* ==============================================================
@@ -283,17 +283,23 @@ const TOASTS = {
 // maintenance, so a bad day costs you progress but never ground.
 const FLOOR_EVENTS = ["shake", "hall2", "night"];
 
-const tgt = (q) => `https://www.target.com/s?searchTerm=${encodeURIComponent(q)}`;
 // Room stock is shelf-stable only — nothing to refrigerate, cook, or watch for
 // spoilage. Milk comes from the dining hall with the meals. This is what
 // finally makes the under-8-inch fridge irrelevant.
 const PANTRY = [
-  { id: "whey", name: "Whey protein", unit: "scoops", pkg: 21, perDay: 1, price: 40, where: "Levels Grass Fed · 21 scoops", buy: tgt("levels grass fed whey protein") },
-  { id: "pb", name: "Peanut butter", unit: "tbsp", pkg: 72, perDay: 5, price: 8, where: "Jif 40oz", buy: tgt("jif creamy peanut butter 40oz") },
-  { id: "mix", name: "Peanut packets", unit: "packets", pkg: 30, perDay: 3, price: 10, where: "Planters Salted 1oz · 3 × 10-pack", buy: tgt("planters salted peanuts 10 pack 1 oz") },
-  { id: "creatine", name: "Creatine", unit: "tsp", pkg: 80, perDay: 1, price: 20, where: "ON Micronized · in the shake", buy: tgt("creatine monohydrate powder") },
+  { id: "whey", name: "Whey protein", unit: "scoops", pkg: 21, perDay: 1, price: 40,
+    where: "Levels Double Chocolate · 21 scoops", buy: "https://www.instacart.com/products/55503435" },
+  { id: "pb", name: "Peanut butter", unit: "tbsp", pkg: 72, perDay: 5, price: 8,
+    where: "Jif Creamy 40oz", buy: "https://www.instacart.com/products/73044" },
+  { id: "mix", name: "Peanut packets", unit: "packets", pkg: 30, perDay: 3, price: 10,
+    where: "Planters Salted 1oz · 3 × 10-pack", buy: "https://www.instacart.com/products/75241" },
+  // `initial` is the tub already on the shelf (600g = 120 servings). `pkg` is
+  // what a restock gives from here on (300g = 60), since the 600g size isn't
+  // carried. The changeover happens on its own the first time he taps Bought.
+  { id: "creatine", name: "Creatine", unit: "servings", pkg: 60, initial: 120, perDay: 1, price: 20,
+    where: "ON Micronized · 5g daily", buy: "https://www.instacart.com/products/2617372" },
 ];
-const FULL_PANTRY = Object.fromEntries(PANTRY.map((i) => [i.id, i.pkg]));
+const FULL_PANTRY = Object.fromEntries(PANTRY.map((i) => [i.id, i.initial ?? i.pkg]));
 // What each feed draws from YOUR stock. The bar is bought and eaten the same
 // morning (never stocked), and dinner milk is the dining hall's — neither
 // touches the fridge counts.
@@ -882,7 +888,7 @@ function GainCoach() {
                 <div key={item.id} style={S.card}>
                   <span style={{ fontWeight: 800, fontSize: 16 }}>{item.name}</span>
                   <div style={{ fontSize: 13, fontWeight: 700, color: C.gray, margin: "6px 0 10px" }}>{item.where} — bought fresh, not stocked</div>
-                  <a href={item.buy} target="_blank" rel="noopener" style={{ ...S.btnDim, display: "block", padding: 10, textAlign: "center", textDecoration: "none" }}>🎯 Target</a>
+                  <a href={item.buy} target="_blank" rel="noopener" style={{ ...S.btnDim, display: "block", padding: 10, textAlign: "center", textDecoration: "none" }}>🛒 Instacart</a>
                 </div>
               );
               const left = state.pantry?.[item.id] ?? item.pkg;
@@ -905,7 +911,7 @@ function GainCoach() {
                   <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>{item.where} · ~${item.price}</div>
                   <div style={{ display: "flex", gap: 8 }}>
                     <button style={{ ...S.btn, flex: 1, padding: 10 }} onClick={() => restock(item)}>Bought ✓</button>
-                    <a href={item.buy} target="_blank" rel="noopener" style={{ ...S.btnDim, flex: 1, padding: 10, textAlign: "center", textDecoration: "none" }}>🎯 Target</a>
+                    <a href={item.buy} target="_blank" rel="noopener" style={{ ...S.btnDim, flex: 1, padding: 10, textAlign: "center", textDecoration: "none" }}>🛒 Instacart</a>
                   </div>
                 </div>
               );
