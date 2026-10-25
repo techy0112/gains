@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-title" content="GAINS">
 <meta name="theme-color" content="#000000">
 <title>GAINS</title>
-<!-- v9.5 -->
+<!-- v9.6 -->
 <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%23000000'/%3E%3Ctext x='50' y='68' font-size='50' font-weight='900' text-anchor='middle' fill='white' font-family='Helvetica'%3EG%3C/text%3E%3C/svg%3E">
 <style>
   /* ==============================================================
@@ -123,6 +123,7 @@ window.storage = {
 <script type="text/babel">
 const { useState, useEffect, useRef, useMemo } = React;
 
+const APP_VERSION = "9.6";
 const SAVE_KEY = "gain-coach-v4";
 const OLD_KEY = "gain-coach-v3";
 const T = (h, m) => h * 60 + m;
@@ -287,16 +288,16 @@ const FLOOR_EVENTS = ["shake", "hall2", "night"];
 // spoilage. Milk comes from the dining hall with the meals. This is what
 // finally makes the under-8-inch fridge irrelevant.
 const PANTRY = [
-  { id: "whey", name: "Whey protein", unit: "scoops", pkg: 21, perDay: 1, price: 40,
+  { id: "whey", name: "Whey protein", unit: "scoops", pkg: 21, perDay: 1, price: 44.97,
     where: "Levels Double Chocolate · 21 scoops", buy: "https://www.instacart.com/products/55503435" },
-  { id: "pb", name: "Peanut butter", unit: "tbsp", pkg: 72, perDay: 5, price: 8,
+  { id: "pb", name: "Peanut butter", unit: "tbsp", pkg: 72, perDay: 5, price: 6.97,
     where: "Jif Creamy 40oz", buy: "https://www.instacart.com/products/73044" },
   { id: "mix", name: "Peanut packets", unit: "packets", pkg: 30, perDay: 3, price: 10.26,
     where: "Planters Salted 1oz · 3 × 10-pack", buy: "https://www.instacart.com/products/75241" },
   // `initial` is the tub already on the shelf (600g = 120 servings). `pkg` is
   // what a restock gives from here on (300g = 60), since the 600g size isn't
   // carried. The changeover happens on its own the first time he taps Bought.
-  { id: "creatine", name: "Creatine", unit: "servings", pkg: 60, initial: 120, perDay: 1, price: 20,
+  { id: "creatine", name: "Creatine", unit: "servings", pkg: 60, initial: 120, perDay: 1, price: 17.97,
     where: "ON Micronized · 5g daily", buy: "https://www.instacart.com/products/2617372" },
 ];
 const FULL_PANTRY = Object.fromEntries(PANTRY.map((i) => [i.id, i.initial ?? i.pkg]));
@@ -925,10 +926,10 @@ function GainCoach() {
             })}
             <div style={S.card}>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 15, fontWeight: 700, marginBottom: 6 }}>
-                <span>Restock low</span><span style={{ color: C.warn }}>~${Math.round(lowItems.reduce((a, i) => a + i.price, 0))}</span>
+                <span>Restock low</span><span style={{ color: C.warn }}>~${lowItems.reduce((a, i) => a + i.price, 0).toFixed(2)}</span>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 15, fontWeight: 700 }}>
-                <span>Full restock</span><span style={{ color: C.blue }}>~${Math.round(PANTRY.filter((i) => i.perDay > 0).reduce((a, i) => a + i.price, 0))}</span>
+                <span>Full restock</span><span style={{ color: C.blue }}>~${PANTRY.filter((i) => i.perDay > 0).reduce((a, i) => a + i.price, 0).toFixed(2)}</span>
               </div>
             </div>
           </>
@@ -1058,7 +1059,7 @@ function GainCoach() {
                 <div><b>{rateNow} lb/week</b> · phase: <b>{phase}</b></div>
                 <div>4 lifts/week · 10–20 sets per muscle</div>
                 <div style={{ fontSize: 12, color: C.gray, marginTop: 8, lineHeight: 1.5 }}>
-                  Target recalculates off your logged bodyweight. The rate drops to 0.5 lb/week only when your strength stalls for 3 weeks — typically 6–12 months in, not on a fixed date.
+                  Build v{APP_VERSION}. Target recalculates off your logged bodyweight. The rate drops to 0.5 lb/week only when your strength stalls for 3 weeks — typically 6–12 months in, not on a fixed date.
                 </div>
               </div>
             </div>
