@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-title" content="GAINS">
 <meta name="theme-color" content="#000000">
 <title>GAINS</title>
-<!-- v10.0 -->
+<!-- v10.1 -->
 <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%23000000'/%3E%3Ctext x='50' y='68' font-size='50' font-weight='900' text-anchor='middle' fill='white' font-family='Helvetica'%3EG%3C/text%3E%3C/svg%3E">
 <style>
   /* ==============================================================
@@ -123,7 +123,7 @@ window.storage = {
 <script type="text/babel">
 const { useState, useEffect, useRef, useMemo } = React;
 
-const APP_VERSION = "10.0";
+const APP_VERSION = "10.1";
 const SAVE_KEY = "gain-coach-v4";
 const OLD_KEY = "gain-coach-v3";
 const T = (h, m) => h * 60 + m;
@@ -357,11 +357,11 @@ const fitHall = (pref, dur, dow) => {
 const DINNER_BY = T(20, 15);
 const HALL_SUB = "1,060 cal · 63g · same plate every time";
 const HALL_STEPS = [
-  "Bowl Life: 2 × grilled chicken thigh (6oz)",
-  "3 scoops white rice & red quinoa",
-  "Vegetables — whatever's on the line",
-  "Fill the glass with whole milk",
-  "Still hungry? Dinner roll or a cookie",
+  "BOWL LIFE — 2 grilled chicken thighs (6oz)",
+  "3 scoops rice & red quinoa, same station",
+  "Pile on veg: romaine, squash, beets, feta",
+  "Whole milk from the drink station",
+  "Line too long? GRILL: 2 beef patties = 480 / 44g",
 ];
 // If the hall is shut, this is the swap — same ballpark from room stock.
 const HALL_FALLBACK = "Hall shut? 1 scoop whey + 4 tbsp PB + 2 peanut packets";
