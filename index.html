@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-title" content="GAINS">
 <meta name="theme-color" content="#000000">
 <title>GAINS</title>
-<!-- v9.6 -->
+<!-- v10.0 -->
 <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%23000000'/%3E%3Ctext x='50' y='68' font-size='50' font-weight='900' text-anchor='middle' fill='white' font-family='Helvetica'%3EG%3C/text%3E%3C/svg%3E">
 <style>
   /* ==============================================================
@@ -123,7 +123,7 @@ window.storage = {
 <script type="text/babel">
 const { useState, useEffect, useRef, useMemo } = React;
 
-const APP_VERSION = "9.6";
+const APP_VERSION = "10.0";
 const SAVE_KEY = "gain-coach-v4";
 const OLD_KEY = "gain-coach-v3";
 const T = (h, m) => h * 60 + m;
@@ -161,7 +161,7 @@ const strengthStalled = (hist) => {
 // What the fixed day below actually delivers. Keep this in step with CALS —
 // calGap drives the "add N calories" banner, so a stale value here silently
 // under-reports how far short of target the day is.
-const BASE_DAY_CAL = 3185;
+const BASE_DAY_CAL = 3140;
 
 // ================= FALL 2026 CLASSES =================
 const SEMESTER = { start: "2026-08-31", end: "2026-12-19" };
@@ -271,12 +271,12 @@ const yesterdayKey = () => iso(new Date(Date.now() - 864e5));
 // ================= FOOD =================
 // 3,150 cal / 150g protein, seven small feedings. Two land in the 20-minute
 // gaps between classes. Nothing cooked, nothing blended.
-const CALS = { shake: 415, hall1: 1035, nuts1: 340, nuts2: 170, hall2: 1035, night: 190,
+const CALS = { shake: 320, hall1: 1060, nuts1: 340, nuts2: 170, hall2: 1060, night: 190,
   weighin: 0, water1: 0, water2: 0, water3: 0 };
-const PROT = { shake: 36, hall1: 48, nuts1: 14, nuts2: 7, hall2: 48, night: 8 };
+const PROT = { shake: 32, hall1: 63, nuts1: 14, nuts2: 7, hall2: 63, night: 8 };
 const TOASTS = {
-  shake: "+415 · 36g protein 🥤", hall1: "+1,035 banked 🍽️", nuts1: "+340 banked 🥜",
-  nuts2: "+170 banked 🥜", hall2: "+1,035 banked 🍽️", night: "+190 banked 🌙",
+  shake: "+320 · 32g protein 🥤", hall1: "+1,060 banked 🍽️", nuts1: "+340 banked 🥜",
+  nuts2: "+170 banked 🥜", hall2: "+1,060 banked 🍽️", night: "+190 banked 🌙",
   weighin: "Logged. Data = gains 📈",
   water1: "Hydrated 💧", water2: "Hydrated 💧", water3: "Hydrated 💧",
 };
@@ -290,7 +290,7 @@ const FLOOR_EVENTS = ["shake", "hall2", "night"];
 const PANTRY = [
   { id: "whey", name: "Whey protein", unit: "scoops", pkg: 21, perDay: 1, price: 44.97,
     where: "Levels Double Chocolate · 21 scoops", buy: "https://www.instacart.com/products/55503435" },
-  { id: "pb", name: "Peanut butter", unit: "tbsp", pkg: 72, perDay: 5, price: 6.97,
+  { id: "pb", name: "Peanut butter", unit: "tbsp", pkg: 72, perDay: 4, price: 6.97,
     where: "Jif Creamy 40oz", buy: "https://www.instacart.com/products/73044" },
   { id: "mix", name: "Peanut packets", unit: "packets", pkg: 30, perDay: 3, price: 10.26,
     where: "Planters Salted 1oz · 3 × 10-pack", buy: "https://www.instacart.com/products/75241" },
@@ -310,7 +310,7 @@ const PANTRY_REV = 2;
 // morning (never stocked), and dinner milk is the dining hall's — neither
 // touches the fridge counts.
 const CONSUME = {
-  shake: { whey: 1, pb: 3, creatine: 1 },
+  shake: { whey: 1, pb: 2, creatine: 1 },
   nuts1: { mix: 2 },
   nuts2: { mix: 1 },
   night: { pb: 2 },
@@ -335,17 +335,36 @@ const fmt = (mins) => {
 // Dining hall stops serving at 9 and starts clearing at 8:30, so dinner must
 // be seated by 8:15. When a late lift would push it past this, the evening
 // flips: eat first, train once it settles.
+// Terrace Dining Room, from the posted hours. Weekdays break 10:30-11:00
+// between breakfast and lunch service; weekends open at 9 and run straight
+// through to 15:30. Everything closes 15:30-16:30 and again at 21:00.
+const HALL_HOURS = {
+  week: [[T(7, 0), T(10, 30)], [T(11, 0), T(15, 30)], [T(16, 30), T(21, 0)]],
+  wknd: [[T(9, 0), T(15, 30)], [T(16, 30), T(21, 0)]],
+};
+const hallWindows = (dow) => (dow === 0 || dow === 6 ? HALL_HOURS.wknd : HALL_HOURS.week);
+// Latest start at or before `pref` that fits a whole meal inside one window,
+// with a 10-minute buffer before the shutters come down.
+const fitHall = (pref, dur, dow) => {
+  let best = null;
+  for (const [open, close] of hallWindows(dow)) {
+    if (open + dur + 10 > close) continue;
+    const latest = Math.min(pref, close - dur - 10);
+    if (latest >= open) best = best === null ? latest : Math.max(best, latest);
+  }
+  return best === null ? hallWindows(dow)[0][0] : best;
+};
 const DINNER_BY = T(20, 15);
-const HALL_SUB = "1,035 cal · 48g · same plate every time";
+const HALL_SUB = "1,060 cal · 63g · same plate every time";
 const HALL_STEPS = [
-  "2 palm-size portions of the protein",
-  "2 cups of the starch — rice, pasta, potatoes",
-  "Vegetables, whatever's there",
+  "Bowl Life: 2 × grilled chicken thigh (6oz)",
+  "3 scoops white rice & red quinoa",
+  "Vegetables — whatever's on the line",
   "Fill the glass with whole milk",
-  "Still hungry? Bread roll or dessert",
+  "Still hungry? Dinner roll or a cookie",
 ];
 // If the hall is shut, this is the swap — same ballpark from room stock.
-const HALL_FALLBACK = "Hall closed? 1 scoop whey + 4 tbsp PB + 2 peanut packets";
+const HALL_FALLBACK = "Hall shut? 1 scoop whey + 4 tbsp PB + 2 peanut packets";
 
 // ================= DAY =================
 const buildEvents = (date, offsetMin, liftWeights) => {
@@ -360,15 +379,16 @@ const buildEvents = (date, offsetMin, liftWeights) => {
   if (dow === 0) out.push({ id: "weighin", time: T(9, 0), moved: null, title: "Weigh In",
     sub: "Same conditions every week", steps: ["Step on the scale", "Log it below"] });
 
-  out.push({ id: "shake", time: T(9, 15), moved: null, title: "Shake", sub: "415 cal · 36g",
-    steps: ["1 scoop whey + 8oz water", "5g creatine in the same bottle", "Shake 20 sec, drink", "3 tbsp peanut butter"] });
+  out.push({ id: "shake", time: T(9, 15), moved: null, title: "Shake", sub: "320 cal · 32g",
+    steps: ["1 scoop whey + 8oz water", "5g creatine in the same bottle", "Shake 20 sec, drink", "2 tbsp peanut butter"] });
 
   out.push({ id: "water1", time: T(10, 10), moved: null, title: "Water — 16oz", sub: "", steps: ["Drink 16oz"] });
 
   // Hall meal 1 goes BEFORE the first class, not at a conventional lunch hour.
   // Mon/Thu run 11:20-3:45 with only two 20-minute gaps, and no dining hall is
   // serving at 3:50, so the only real window is the morning.
-  const h1 = before(T(12, 30), 40, busy);
+  const h1raw = before(T(12, 30), 40, busy);
+  const h1 = { t: fitHall(h1raw.t, 40, dow), moved: h1raw.moved };
   out.push({ id: "hall1", time: h1.t, moved: h1.moved, title: "Hall Meal", sub: HALL_SUB,
     steps: [...HALL_STEPS, HALL_FALLBACK] });
 
@@ -384,7 +404,8 @@ const buildEvents = (date, offsetMin, liftWeights) => {
   const flip = !!w && Math.max(T(19, 0), liftT + 85 + 20) > DINNER_BY;
   let nightFloor, hallEnd;
   if (w && flip) {
-    const d = after(Math.max(lastEndBefore(T(23, 59), busy) + 5, T(17, 30)), 40, busy);
+    const draw = after(Math.max(lastEndBefore(T(23, 59), busy) + 5, T(17, 30)), 40, busy);
+    const d = { t: fitHall(draw.t, 40, dow), moved: draw.moved };
     out.push({ id: "hall2", time: d.t, moved: d.moved, title: "Hall Meal", sub: HALL_SUB, steps: [...HALL_STEPS, HALL_FALLBACK] });
     liftT = d.t + 70;                       // 40 to eat, 30 to settle
     hallEnd = d.t + 40;
@@ -392,7 +413,8 @@ const buildEvents = (date, offsetMin, liftWeights) => {
     nightFloor = liftT + 75 + 30;
   } else {
     if (w) pushLift(liftT, liftMoved);
-    const r = after(T(19, 0), 40, busy);
+    const rraw = after(T(19, 0), 40, busy);
+    const r = { t: fitHall(rraw.t, 40, dow), moved: rraw.moved };
     out.push({ id: "hall2", time: r.t, moved: r.moved, title: "Hall Meal", sub: HALL_SUB, steps: [...HALL_STEPS, HALL_FALLBACK] });
     nightFloor = r.t + 100;
     hallEnd = -Infinity;
