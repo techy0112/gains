@@ -4,12 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="GAINS">
-<meta name="theme-color" content="#F5F4EF">
+<meta name="theme-color" content="#000000">
 <title>GAINS</title>
-<!-- v9.0 -->
-<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%232743F0'/%3E%3Ctext x='50' y='68' font-size='50' font-weight='900' text-anchor='middle' fill='white' font-family='Helvetica'%3EG%3C/text%3E%3C/svg%3E">
+<!-- v9.1 -->
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%23000000'/%3E%3Ctext x='50' y='68' font-size='50' font-weight='900' text-anchor='middle' fill='white' font-family='Helvetica'%3EG%3C/text%3E%3C/svg%3E">
 <style>
   /* ==============================================================
      LAYOUT SHELL — read this before changing anything in here.
@@ -46,10 +46,10 @@
   html, body { margin: 0; padding: 0; height: 100%; }
 
   body {
-    background: #0E0E10;         /* behind the shell, so no white ever flashes */
+    background: #000000;         /* behind the shell, so nothing flashes */
     overscroll-behavior: none;   /* kill document rubber-banding */
     font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-    color: #0E0E10;
+    color: #FFFFFF;
   }
 
   .app {
@@ -59,7 +59,7 @@
     margin: 0 auto;
     display: flex;
     flex-direction: column;
-    background: #F5F4EF;
+    background: #000000;
     overflow: hidden;
   }
 
@@ -80,8 +80,8 @@
   .tabbar {
     flex: 0 0 auto;
     display: flex;
-    background: #0E0E10;
-    border-radius: 16px 16px 0 0;
+    background: #000000;
+    border-top: 1px solid #2E2E2E;
     /* Deliberately NOT env(safe-area-inset-bottom). Reserving the 34pt inset
        left the bottom third of this bar as empty black. Home Screen use only,
        so there is no Safari toolbar to clear — the bar hugs its labels with an
@@ -92,6 +92,12 @@
   }
 
   input, button, select, textarea { font-family: inherit; }
+  /* The press state is the whole aesthetic: outlined by default, solid white
+     with black text the moment you touch it. Inline styles win over normal
+     rules, hence the !important. */
+  button:active, a:active { background: #FFFFFF !important; color: #000000 !important; }
+  input { color: #FFFFFF; background: #000000; caret-color: #FFFFFF; }
+  input::placeholder { color: #6A6A6A; }
   /* 16px minimum on inputs stops iOS from zooming the page on focus */
   input { font-size: 16px; }
 </style>
@@ -397,16 +403,20 @@ const buildEvents = (date, offsetMin, liftWeights) => {
 };
 
 // ================= THEME =================
-const C = { ink: "#0E0E10", paper: "#F5F4EF", blue: "#2743F0", gray: "#6E6E72", line: "#E4E2DA", warn: "#C6470E", ok: "#1B7F4B" };
+// Monochrome. Keys keep their old names so every call site still reads, but
+// "ink" is now the foreground/border white and "paper" is the black ground.
+const C = { ink: "#FFFFFF", paper: "#000000", blue: "#FFFFFF", gray: "#8A8A8A", line: "#2E2E2E", warn: "#FFFFFF", ok: "#FFFFFF" };
 const S = {
   h1: { fontSize: 34, fontWeight: 900, letterSpacing: "-0.03em", textTransform: "uppercase", margin: "0 0 2px" },
   header: { padding: "22px 18px 6px" },
-  tabBtn: (a) => ({ flex: 1, height: 70, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "18px 0 0", background: "none", border: "none", color: a ? C.paper : C.gray, fontWeight: 800, fontSize: 10, lineHeight: 1, letterSpacing: "0.05em", textTransform: "uppercase", cursor: "pointer" }),
-  btn: { padding: "12px 18px", background: C.blue, color: "#fff", border: `2px solid ${C.ink}`, borderRadius: 10, fontWeight: 800, fontSize: 15, cursor: "pointer" },
-  input: { flex: 1, padding: "12px 14px", fontSize: 16, border: `2px solid ${C.ink}`, borderRadius: 10, background: "#fff", minWidth: 0 },
-  card: { background: "#fff", border: `2px solid ${C.ink}`, borderRadius: 14, margin: "12px 14px", padding: 16, boxShadow: `4px 4px 0 ${C.ink}` },
+  tabBtn: (a) => ({ flex: 1, height: 70, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "18px 0 0", background: "none", border: "none", color: a ? C.ink : C.gray, fontWeight: 800, fontSize: 10, lineHeight: 1, letterSpacing: "0.05em", textTransform: "uppercase", cursor: "pointer" }),
+  btn: { padding: "12px 18px", background: "transparent", color: C.ink, border: `2px solid ${C.ink}`, borderRadius: 10, fontWeight: 800, fontSize: 15, cursor: "pointer" },
+  btnDim: { padding: "12px 18px", background: "transparent", color: C.gray, border: `1px solid ${C.gray}`, borderRadius: 10, fontWeight: 800, fontSize: 15, cursor: "pointer" },
+  btnOn: { background: C.ink, color: C.paper },
+  input: { flex: 1, padding: "12px 14px", fontSize: 16, border: `2px solid ${C.ink}`, borderRadius: 10, background: C.paper, color: C.ink, minWidth: 0 },
+  card: { background: C.paper, border: `1px solid ${C.ink}`, borderRadius: 14, margin: "12px 14px", padding: 16 },
   label: { fontSize: 11, fontWeight: 800, letterSpacing: "0.14em", textTransform: "uppercase", color: C.blue, margin: "0 0 8px" },
-  banner: (col, bg) => ({ margin: "10px 14px", padding: "12px 16px", borderRadius: 12, border: `2px solid ${col}`, background: bg, fontSize: 14, fontWeight: 700, color: col }),
+  banner: (col) => ({ margin: "10px 14px", padding: "12px 16px", borderRadius: 12, border: `1px solid ${col}`, background: C.paper, fontSize: 14, fontWeight: 700, color: col }),
 };
 
 // ================= COMPONENTS (module scope — see note in v6.1) =================
@@ -453,16 +463,16 @@ const Chart = ({ pts, sPts, startWeight, startT, rateNow }) => {
       <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", display: "block" }}>
         {ax && <text x="2" y={ax.Y(ax.hi) + 4} fontSize="10" fontWeight="700" fill={C.gray}>{Math.round(ax.hi)}</text>}
         {ax && <text x="2" y={ax.Y(ax.lo) + 4} fontSize="10" fontWeight="700" fill={C.gray}>{Math.round(ax.lo)}</text>}
-        {pace && <polyline points={pace} fill="none" stroke={C.ok} strokeWidth="2" strokeDasharray="5 4" />}
-        {s && <polyline points={s.poly} fill="none" stroke={C.warn} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />}
-        {s && s.dots.map(([x, y], i) => <circle key={"s" + i} cx={x} cy={y} r="4" fill={C.warn} />)}
-        {w && <polyline points={w.poly} fill="none" stroke={C.blue} strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" />}
-        {w && w.dots.map(([x, y], i) => <circle key={"w" + i} cx={x} cy={y} r="4.5" fill={C.blue} />)}
+        {pace && <polyline points={pace} fill="none" stroke={C.gray} strokeWidth="1.5" strokeDasharray="2 4" />}
+        {s && <polyline points={s.poly} fill="none" stroke={C.ink} strokeWidth="2" strokeDasharray="7 4" strokeLinecap="round" />}
+        {s && s.dots.map(([x, y], i) => <circle key={"s" + i} cx={x} cy={y} r="3.5" fill={C.paper} stroke={C.ink} strokeWidth="1.5" />)}
+        {w && <polyline points={w.poly} fill="none" stroke={C.ink} strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" />}
+        {w && w.dots.map(([x, y], i) => <circle key={"w" + i} cx={x} cy={y} r="4.5" fill={C.ink} />)}
       </svg>
       <div style={{ display: "flex", gap: 14, marginTop: 8, flexWrap: "wrap" }}>
-        <span style={{ fontSize: 12, fontWeight: 700, color: C.blue }}>● Bodyweight</span>
-        <span style={{ fontSize: 12, fontWeight: 700, color: C.warn }}>● Strength</span>
-        {pace && <span style={{ fontSize: 12, fontWeight: 700, color: C.ok }}>┄ On pace</span>}
+        <span style={{ fontSize: 12, fontWeight: 700, color: C.ink }}>━ Bodyweight</span>
+        <span style={{ fontSize: 12, fontWeight: 700, color: C.ink }}>╌ Strength</span>
+        {pace && <span style={{ fontSize: 12, fontWeight: 700, color: C.gray }}>┈ On pace</span>}
       </div>
     </>
   );
@@ -470,20 +480,20 @@ const Chart = ({ pts, sPts, startWeight, startT, rateNow }) => {
 
 const EventCard = ({ e, mark, past, active, weightInput, setWeightInput, onLogWeighIn, onComplete, onToggle, onSkip }) => {
   if (!past && !mark) return null;
-  const base = { margin: "10px 14px", borderRadius: 14, border: `2px solid ${C.ink}`, background: "#fff", transition: "all 0.4s ease", overflow: "hidden" };
+  const base = { margin: "10px 14px", borderRadius: 14, border: `1px solid ${C.ink}`, background: C.paper, transition: "all 0.4s ease", overflow: "hidden" };
   if (mark) {
     const skipped = mark === "skip";
     const undoable = e.id !== "lift";
     return (
       <div style={{ ...base, opacity: 0.35, transform: "scale(0.94)", padding: "10px 14px", display: "flex", alignItems: "center", gap: 10, cursor: undoable ? "pointer" : "default" }}
         onClick={undoable ? onToggle : undefined}>
-        <span style={{ fontWeight: 900, color: skipped ? C.gray : C.blue }}>{skipped ? "✕" : "✓"}</span>
+        <span style={{ fontWeight: 900, color: skipped ? C.gray : C.ink }}>{skipped ? "✕" : "✓"}</span>
         <span style={{ fontSize: 14, fontWeight: 700, textDecoration: "line-through" }}>{fmt(e.time)} — {e.title}{skipped ? " (skipped)" : ""}</span>
       </div>
     );
   }
   return (
-    <div style={{ ...base, padding: 16, boxShadow: active ? `5px 5px 0 ${C.blue}` : `4px 4px 0 ${C.ink}`, opacity: active ? 1 : 0.75 }}>
+    <div style={{ ...base, padding: 16, borderWidth: active ? 2 : 1, borderColor: active ? C.ink : C.line, opacity: active ? 1 : 0.6 }}>
       <span style={{ fontFamily: "'Courier New', monospace", fontWeight: 700, fontSize: 13, color: active ? C.blue : C.gray }}>
         {fmt(e.time)} {active ? "· NOW" : "· catch up"}{e.moved ? ` · after ${e.moved}` : ""}
       </span>
@@ -501,7 +511,7 @@ const EventCard = ({ e, mark, past, active, weightInput, setWeightInput, onLogWe
       {e.id === "lift" && (
         <div style={{ marginTop: 14 }}>
           <button style={{ ...S.btn, width: "100%" }} onClick={() => onComplete(true)}>Hit top of every range ✓</button>
-          <button style={{ ...S.btn, width: "100%", marginTop: 8, background: "#fff", color: C.ink }} onClick={() => onComplete(false)}>Fell short</button>
+          <button style={{ ...S.btnDim, width: "100%", marginTop: 8 }} onClick={() => onComplete(false)}>Fell short</button>
         </div>
       )}
       {e.id !== "weighin" && e.id !== "lift" && <button style={{ ...S.btn, width: "100%", marginTop: 14 }} onClick={onToggle}>Done ✓</button>}
@@ -735,7 +745,7 @@ function GainCoach() {
     <div className="app">
       <div className="scroll" ref={scrollRef}>
         {toast && (
-          <div style={{ position: "fixed", top: "calc(env(safe-area-inset-top) + 12px)", left: 14, right: 14, maxWidth: 452, margin: "0 auto", background: C.ink, color: "#fff", padding: "12px 20px", borderRadius: 12, fontWeight: 800, fontSize: 15, zIndex: 99, boxShadow: "0 4px 14px rgba(0,0,0,0.3)", textAlign: "center" }}>{toast}</div>
+          <div style={{ position: "fixed", top: "calc(env(safe-area-inset-top) + 12px)", left: 14, right: 14, maxWidth: 452, margin: "0 auto", background: C.ink, color: C.paper, padding: "12px 20px", borderRadius: 12, fontWeight: 800, fontSize: 15, zIndex: 99, textAlign: "center" }}>{toast}</div>
         )}
 
         {tab === "home" && (
@@ -768,27 +778,27 @@ function GainCoach() {
             )}
 
             {floorDone < 3 && (
-              <div style={S.banner(floorDone === 3 ? C.ok : C.gray, "#fff")}>
-                Floor {floorDone}/3 — bar, breakfast, last feed. Hit these and today counts, whatever else happens.
+              <div style={S.banner(floorDone === 3 ? C.ink : C.gray)}>
+                Floor {floorDone}/3 — shake, dinner, last feed. Hit these and today counts, whatever else happens.
               </div>
             )}
-            {floorDone === 3 && <div style={S.banner(C.ok, "#EAF5EE")}>✓ Floor hit. Today counts.</div>}
+            {floorDone === 3 && <div style={S.banner(C.ink)}>✓ Floor hit. Today counts.</div>}
 
             {stalled && (
-              <div style={S.banner(C.warn, "#FDF1EA")}>
+              <div style={S.banner(C.ink)}>
                 No new strength PR in 3 weeks — you've likely left the novice phase.
                 Rate dropped to 0.5 lb/week ({calTarget.toLocaleString()} cal). Same surplus would just be fat now.
               </div>
             )}
 
             {calGap > 120 && (
-              <div style={S.banner(C.blue, "#EEF1FE")}>
+              <div style={S.banner(C.ink)}>
                 You're {bw} lb now — target is {calTarget.toLocaleString()} cal. Add {Math.round(calGap / 100) * 100} on top of the day below (1 PB spoon ≈ 95, 1 cup milk ≈ 150).
               </div>
             )}
 
             {pace && Math.abs(pace.diff) > 1.5 && (
-              <div style={S.banner(pace.diff < 0 ? C.warn : C.blue, pace.diff < 0 ? "#FDF1EA" : "#EEF1FE")}>
+              <div style={S.banner(C.ink)}>
                 {pace.diff < 0
                   ? `${Math.abs(pace.diff).toFixed(1)} lb behind pace — add 300 cal/day (1 more PB spoon + a cup of milk)`
                   : `${pace.diff.toFixed(1)} lb ahead of pace — ease off 200 cal if it keeps climbing`}
@@ -796,7 +806,7 @@ function GainCoach() {
             )}
 
             {lowItems.length > 0 && (
-              <div style={{ ...S.banner(C.warn, "#FDF1EA"), cursor: "pointer" }} onClick={() => setTab("fridge")}>
+              <div style={{ ...S.banner(C.ink), cursor: "pointer" }} onClick={() => setTab("fridge")}>
                 🛒 Running low: {lowItems.map((i) => i.name).join(", ")}
               </div>
             )}
@@ -826,7 +836,7 @@ function GainCoach() {
             <div style={{ display: "flex", gap: 6, margin: "0 14px 4px" }}>
               {LIFT_DAYS.map((d) => (
                 <button key={d} onClick={() => { setLiftTab(d); setOpenLift(null); }}
-                  style={{ flex: 1, padding: "10px 2px", fontWeight: 900, fontSize: 12, borderRadius: 10, border: `2px solid ${C.ink}`, background: liftTab === d ? C.blue : "#fff", color: liftTab === d ? "#fff" : C.ink, cursor: "pointer" }}>
+                  style={{ flex: 1, padding: "10px 2px", fontWeight: 900, fontSize: 12, borderRadius: 10, border: `2px solid ${C.ink}`, background: liftTab === d ? C.ink : "transparent", color: liftTab === d ? C.paper : C.ink, cursor: "pointer" }}>
                   {WORKOUTS[d].name}
                 </button>
               ))}
@@ -869,14 +879,14 @@ function GainCoach() {
                 <div key={item.id} style={S.card}>
                   <span style={{ fontWeight: 800, fontSize: 16 }}>{item.name}</span>
                   <div style={{ fontSize: 13, fontWeight: 700, color: C.gray, margin: "6px 0 10px" }}>{item.where} — bought fresh, not stocked</div>
-                  <a href={item.buy} target="_blank" rel="noopener" style={{ ...S.btn, display: "block", padding: 10, background: "#fff", color: C.ink, textAlign: "center", textDecoration: "none" }}>🎯 Target</a>
+                  <a href={item.buy} target="_blank" rel="noopener" style={{ ...S.btnDim, display: "block", padding: 10, textAlign: "center", textDecoration: "none" }}>🎯 Target</a>
                 </div>
               );
               const left = state.pantry?.[item.id] ?? item.pkg;
               const days = item.perDay > 0 ? left / item.perDay : null;
               const low = days != null && days <= (item.lowAt ?? 3);
               return (
-                <div key={item.id} style={{ ...S.card, borderColor: low ? C.warn : C.ink }}>
+                <div key={item.id} style={{ ...S.card, borderColor: low ? C.ink : C.line, borderWidth: low ? 2 : 1 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
                     <span style={{ fontWeight: 800, fontSize: 16 }}>{item.name}</span>
                     {days != null && (
@@ -885,14 +895,14 @@ function GainCoach() {
                       </span>
                     )}
                   </div>
-                  <div style={{ height: 8, borderRadius: 4, background: C.line, margin: "10px 0", overflow: "hidden" }}>
-                    <div style={{ height: "100%", width: `${Math.min(1, left / item.pkg) * 100}%`, background: low ? C.warn : C.blue, transition: "width 0.4s" }} />
+                  <div style={{ height: 8, borderRadius: 4, background: C.line, margin: "10px 0", overflow: "hidden", border: `1px solid ${C.line}` }}>
+                    <div style={{ height: "100%", width: `${Math.min(1, left / item.pkg) * 100}%`, background: low ? C.ink : C.gray, transition: "width 0.4s" }} />
                   </div>
                   <div style={{ fontSize: 13, color: C.gray, marginBottom: 4 }}>~{Math.round(left * 10) / 10} {item.unit} left</div>
                   <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>{item.where} · ~${item.price}</div>
                   <div style={{ display: "flex", gap: 8 }}>
                     <button style={{ ...S.btn, flex: 1, padding: 10 }} onClick={() => restock(item)}>Bought ✓</button>
-                    <a href={item.buy} target="_blank" rel="noopener" style={{ ...S.btn, flex: 1, padding: 10, background: "#fff", color: C.ink, textAlign: "center", textDecoration: "none" }}>🎯 Target</a>
+                    <a href={item.buy} target="_blank" rel="noopener" style={{ ...S.btnDim, flex: 1, padding: 10, textAlign: "center", textDecoration: "none" }}>🎯 Target</a>
                   </div>
                 </div>
               );
@@ -958,7 +968,7 @@ function GainCoach() {
                 <p style={{ ...S.label, margin: 0 }}>Growth chart</p>
                 <div style={{ display: "flex", gap: 4 }}>
                   {["1M", "3M", "ALL"].map((r) => (
-                    <button key={r} onClick={() => setRange(r)} style={{ padding: "5px 9px", fontSize: 11, fontWeight: 800, borderRadius: 8, border: `2px solid ${C.ink}`, background: range === r ? C.blue : "#fff", color: range === r ? "#fff" : C.ink, cursor: "pointer" }}>{r}</button>
+                    <button key={r} onClick={() => setRange(r)} style={{ padding: "5px 9px", fontSize: 11, fontWeight: 800, borderRadius: 8, border: `2px solid ${C.ink}`, background: range === r ? C.ink : "transparent", color: range === r ? C.paper : C.ink, cursor: "pointer" }}>{r}</button>
                   ))}
                 </div>
               </div>
@@ -978,10 +988,10 @@ function GainCoach() {
                   <div key={st.id} style={{ marginBottom: 10 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, fontWeight: 700 }}>
                       <span>{st.name}</span>
-                      <span style={{ color: now >= goal ? C.ok : C.gray }}>{now} / {goal} lb</span>
+                      <span style={{ color: now >= goal ? C.ink : C.gray }}>{now} / {goal} lb</span>
                     </div>
                     <div style={{ height: 6, borderRadius: 3, background: C.line, marginTop: 4, overflow: "hidden" }}>
-                      <div style={{ height: "100%", width: `${pct * 100}%`, background: now >= goal ? C.ok : C.blue }} />
+                      <div style={{ height: "100%", width: `${pct * 100}%`, background: now >= goal ? C.ink : C.gray }} />
                     </div>
                   </div>
                 );
@@ -1043,7 +1053,7 @@ function GainCoach() {
             </div>
             <div style={S.card}>
               <p style={S.label}>Notifications</p>
-              <button style={{ ...S.btn, width: "100%", background: state.notifOn ? "#fff" : C.blue, color: state.notifOn ? C.ink : "#fff" }} onClick={toggleNotifs}>
+              <button style={{ ...S.btn, width: "100%", ...(state.notifOn ? S.btnOn : {}) }} onClick={toggleNotifs}>
                 {state.notifOn ? "Turn off notifications" : "Turn on notifications"}
               </button>
             </div>
